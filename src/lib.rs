@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc, time::Duration};
+
 use gpui::{
   App, ClipboardItem, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement,
   KeyBinding, StyleRefinement, Window, actions, div, prelude::*, rgb,
@@ -5,6 +7,7 @@ use gpui::{
 
 const DEFAULT_MACOS_KEY_BINDING: &str = "cmd-alt-i";
 const DEFAULT_OTHER_KEY_BINDING: &str = "ctrl-alt-i";
+const COPY_FEEDBACK_DURATION: Duration = Duration::from_millis(1500);
 
 actions!(gpui_devtools, [ToggleInspector]);
 
@@ -56,8 +59,9 @@ pub fn init_with(config: Config, cx: &mut App) {
     render_div_state(state, &div_config)
   });
 
+  let copy_feedback = Rc::new(RefCell::new(CopyFeedback::default()));
   cx.set_inspector_renderer(Box::new(move |inspector, window, cx| {
-    render_inspector(inspector, window, cx, &config).into_any_element()
+    render_inspector(inspector, window, cx, &copy_feedback, &config).into_any_element()
   }));
 }
 
@@ -75,6 +79,7 @@ fn render_inspector(
   inspector: &mut Inspector,
   window: &mut Window,
   cx: &mut Context<Inspector>,
+  copy_feedback: &Rc<RefCell<CopyFeedback>>,
   config: &Config,
 ) -> Div {
   let active_element = inspector.active_element_id().cloned();
@@ -90,7 +95,7 @@ fn render_inspector(
     .gap_3();
   let content = if let Some(id) = active_element {
     content
-      .child(render_element_id(&id, cx, config))
+      .child(render_element_id(&id, cx, copy_feedback, config))
       .children(inspector_states)
   } else {
     content.child(render_empty_state(is_picking, config))
@@ -187,17 +192,26 @@ fn empty_state_copy(is_picking: bool) -> (&'static str, &'static str) {
   }
 }
 
-fn render_element_id(id: &InspectorElementId, cx: &mut Context<Inspector>, config: &Config) -> Div {
+fn render_element_id(
+  id: &InspectorElementId,
+  cx: &mut Context<Inspector>,
+  copy_feedback: &Rc<RefCell<CopyFeedback>>,
+  config: &Config,
+) -> Div {
   let source = source_location(id);
   let global_id = id.path.global_id.to_string();
 
   section("Selected element", config)
     .child(copyable_property(
-      "gpui-devtools-copy-source",
-      "Source",
-      source.clone(),
-      source,
+      CopyableProperty {
+        id: "gpui-devtools-copy-source",
+        label: "Source",
+        display_value: source.clone(),
+        copy_value: source,
+        target: CopyTarget::Source,
+      },
       cx,
+      copy_feedback,
       config,
     ))
     .child(
@@ -207,11 +221,15 @@ fn render_element_id(id: &InspectorElementId, cx: &mut Context<Inspector>, confi
         .child(property("Instance", id.instance_id.to_string(), config))
         .child(
           copyable_property(
-            "gpui-devtools-copy-global-id",
-            "Global ID",
-            truncate_middle(&global_id, 48),
-            global_id,
+            CopyableProperty {
+              id: "gpui-devtools-copy-global-id",
+              label: "Global ID",
+              display_value: truncate_middle(&global_id, 48),
+              copy_value: global_id,
+              target: CopyTarget::GlobalId,
+            },
             cx,
+            copy_feedback,
             config,
           )
           .w_0()
@@ -654,25 +672,93 @@ fn property(label: &'static str, value: String, config: &Config) -> Div {
   property_with_action(label, value, None, config)
 }
 
-fn copyable_property(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CopyTarget {
+  Source,
+  GlobalId,
+}
+
+#[derive(Debug, Default)]
+struct CopyFeedback {
+  copied: Option<(CopyTarget, String)>,
+  generation: u64,
+}
+
+impl CopyFeedback {
+  fn is_copied(&self, target: CopyTarget, value: &str) -> bool {
+    self
+      .copied
+      .as_ref()
+      .is_some_and(|copied| copied.0 == target && copied.1 == value)
+  }
+
+  fn mark_copied(&mut self, target: CopyTarget, value: String) -> u64 {
+    self.generation = self.generation.wrapping_add(1);
+    self.copied = Some((target, value));
+    self.generation
+  }
+
+  fn clear(&mut self, generation: u64) -> bool {
+    if self.generation != generation {
+      return false;
+    }
+
+    self.copied = None;
+    true
+  }
+}
+
+struct CopyableProperty {
   id: &'static str,
   label: &'static str,
   display_value: String,
   copy_value: String,
+  target: CopyTarget,
+}
+
+fn copyable_property(
+  property: CopyableProperty,
   cx: &mut Context<Inspector>,
+  copy_feedback: &Rc<RefCell<CopyFeedback>>,
   config: &Config,
 ) -> Div {
+  let CopyableProperty {
+    id,
+    label,
+    display_value,
+    copy_value,
+    target,
+  } = property;
+  let is_copied = copy_feedback.borrow().is_copied(target, &copy_value);
+  let copy_feedback = Rc::clone(copy_feedback);
   let action = div()
     .id(id)
+    .w(gpui::px(56.0))
     .px_1()
     .rounded_sm()
     .cursor_pointer()
+    .text_center()
     .text_xs()
+    .whitespace_nowrap()
     .text_color(rgb(config.accent))
     .hover(|button| button.bg(rgb(config.background)))
-    .child("Copy")
-    .on_click(cx.listener(move |_inspector, _, _window, cx| {
+    .child(if is_copied { "Copied!" } else { "Copy" })
+    .on_click(cx.listener(move |_inspector, _, window, cx| {
       cx.write_to_clipboard(text_clipboard_item(copy_value.clone()));
+      let generation = copy_feedback
+        .borrow_mut()
+        .mark_copied(target, copy_value.clone());
+      window.refresh();
+
+      let copy_feedback = Rc::clone(&copy_feedback);
+      cx.spawn(async move |inspector, cx| {
+        cx.background_executor().timer(COPY_FEEDBACK_DURATION).await;
+        let cleared = copy_feedback.borrow_mut().clear(generation);
+        if cleared {
+          let _ = inspector.update(cx, |_, cx| cx.notify());
+        }
+      })
+      .detach();
     }));
 
   property_with_action(
@@ -848,6 +934,18 @@ mod tests {
         }],
       }]
     );
+  }
+
+  #[test]
+  fn copy_feedback_ignores_stale_timeouts() {
+    let mut feedback = CopyFeedback::default();
+    let first = feedback.mark_copied(CopyTarget::Source, "src/lib.rs:1:1".into());
+    let second = feedback.mark_copied(CopyTarget::GlobalId, "global-id".into());
+
+    assert!(!feedback.clear(first));
+    assert!(feedback.is_copied(CopyTarget::GlobalId, "global-id"));
+    assert!(feedback.clear(second));
+    assert!(!feedback.is_copied(CopyTarget::GlobalId, "global-id"));
   }
 
   #[test]
