@@ -281,10 +281,30 @@ fn render_style_property(property: StyleProperty, config: &Config) -> Div {
       div()
         .w_0()
         .flex_1()
-        .truncate()
-        .font_family("monospace")
-        .text_right()
-        .child(property.value),
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap_2()
+        .when_some(property.swatch, |row, swatch| {
+          row.child(
+            div()
+              .size_3()
+              .flex_shrink_0()
+              .rounded_sm()
+              .border_1()
+              .border_color(rgb(config.border))
+              .bg(swatch),
+          )
+        })
+        .child(
+          div()
+            .w_0()
+            .flex_1()
+            .truncate()
+            .font_family("monospace")
+            .text_right()
+            .child(property.value),
+        ),
     )
 }
 
@@ -298,6 +318,7 @@ struct StyleGroup {
 struct StyleProperty {
   label: &'static str,
   value: String,
+  swatch: Option<gpui::Fill>,
 }
 
 fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
@@ -387,8 +408,8 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   push_group(&mut groups, "Spacing", spacing);
 
   let mut appearance = Vec::new();
-  push_debug(&mut appearance, "Background", style.background.as_ref());
-  push_debug(&mut appearance, "Border color", style.border_color.as_ref());
+  push_fill(&mut appearance, "Background", style.background.as_ref());
+  push_color(&mut appearance, "Border color", style.border_color.as_ref());
   push_debug(&mut appearance, "Border style", style.border_style.as_ref());
   push_debug(
     &mut appearance,
@@ -417,7 +438,7 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
 
   if let Some(text) = style.text.explicit_refinement() {
     let mut typography = Vec::new();
-    push_debug(&mut typography, "Color", text.color.as_ref());
+    push_color(&mut typography, "Color", text.color.as_ref());
     push_debug(&mut typography, "Font family", text.font_family.as_ref());
     push_debug(
       &mut typography,
@@ -433,7 +454,7 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
     push_debug(&mut typography, "Line height", text.line_height.as_ref());
     push_debug(&mut typography, "Font weight", text.font_weight.as_ref());
     push_debug(&mut typography, "Font style", text.font_style.as_ref());
-    push_debug(
+    push_color(
       &mut typography,
       "Background",
       text.background_color.as_ref(),
@@ -474,6 +495,42 @@ impl ExplicitTextRefinement for Option<gpui::TextStyleRefinement> {
   }
 }
 
+fn push_color(
+  properties: &mut Vec<StyleProperty>,
+  label: &'static str,
+  color: Option<&gpui::Hsla>,
+) {
+  if let Some(color) = color {
+    properties.push(StyleProperty {
+      label,
+      value: format_color(*color),
+      swatch: Some((*color).into()),
+    });
+  }
+}
+
+fn push_fill(properties: &mut Vec<StyleProperty>, label: &'static str, fill: Option<&gpui::Fill>) {
+  if let Some(fill) = fill {
+    properties.push(StyleProperty {
+      label,
+      value: "Color".into(),
+      swatch: Some(fill.clone()),
+    });
+  }
+}
+
+fn format_color(color: gpui::Hsla) -> String {
+  let rgba = color.to_rgb();
+  let [red, green, blue, alpha] = [rgba.r, rgba.g, rgba.b, rgba.a]
+    .map(|component| (component.clamp(0.0, 1.0) * 255.0).round() as u8);
+
+  if alpha == u8::MAX {
+    format!("#{red:02x}{green:02x}{blue:02x}")
+  } else {
+    format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}")
+  }
+}
+
 fn push_debug<T: std::fmt::Debug>(
   properties: &mut Vec<StyleProperty>,
   label: &'static str,
@@ -483,6 +540,7 @@ fn push_debug<T: std::fmt::Debug>(
     properties.push(StyleProperty {
       label,
       value: format!("{value:?}"),
+      swatch: None,
     });
   }
 }
@@ -656,9 +714,16 @@ mod tests {
         properties: vec![StyleProperty {
           label: "Opacity",
           value: "0.5".into(),
+          swatch: None,
         }],
       }]
     );
+  }
+
+  #[test]
+  fn colors_are_formatted_as_hex() {
+    assert_eq!(format_color(gpui::white()), "#ffffff");
+    assert_eq!(format_color(gpui::hsla(0.0, 1.0, 0.5, 0.5)), "#ff000080");
   }
 
   #[test]
