@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/gpui-devtools.svg)](https://crates.io/crates/gpui-devtools)
 [![License](https://img.shields.io/crates/l/gpui-devtools.svg)](LICENSE)
 
-Framework-agnostic developer tools for [GPUI](https://gpui.rs) applications.
+Inspect and debug [GPUI](https://gpui.rs) applications with an element picker, layout information, source locations, and style details.
 
 The first release provides an element picker and inspector with:
 
