@@ -1,8 +1,8 @@
 [package]
 name = "gpui-devtools"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
-description = "Framework-agnostic developer tools for GPUI applications"
+description = "Developer tools for inspecting and debugging GPUI applications"
 license = "MIT"
 repository = "https://github.com/joris-gallot/gpui-devtools"
 keywords = ["gpui", "devtools", "inspector", "debugging"]
