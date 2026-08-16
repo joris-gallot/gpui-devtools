@@ -1,0 +1,16 @@
+[package]
+name = "gpui-devtools"
+version = "0.1.0"
+edition = "2024"
+description = "Framework-agnostic developer tools for GPUI applications"
+license = "MIT"
+repository = "https://github.com/joris-gallot/gpui-devtools"
+keywords = ["gpui", "devtools", "inspector", "debugging"]
+categories = ["development-tools::debugging", "gui"]
+
+[dependencies]
+gpui = { version = "0.2.2", features = ["inspector"] }
+
+[workspace]
+members = ["examples/basic"]
+resolver = "2"
