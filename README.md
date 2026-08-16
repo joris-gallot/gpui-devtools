@@ -1,5 +1,9 @@
 # gpui-devtools
 
+[![CI](https://github.com/joris-gallot/gpui-devtools/actions/workflows/ci.yml/badge.svg)](https://github.com/joris-gallot/gpui-devtools/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/gpui-devtools.svg)](https://crates.io/crates/gpui-devtools)
+[![License](https://img.shields.io/crates/l/gpui-devtools.svg)](LICENSE)
+
 MIT-licensed, framework-agnostic developer tools for [GPUI](https://gpui.rs) applications.
 
 The first release provides an element picker and inspector with:
@@ -16,8 +20,10 @@ The first release provides an element picker and inspector with:
 devtools = ["dep:gpui-devtools", "gpui/inspector"]
 
 [dependencies]
-gpui-devtools = { git = "https://github.com/joris-gallot/gpui-devtools", optional = true }
+gpui-devtools = { version = "0.1", optional = true }
 ```
+
+Version 0.1 is compatible with GPUI 0.2.
 
 ## Use
 

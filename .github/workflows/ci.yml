@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GPUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev \
+            libfontconfig-dev \
+            libglib2.0-dev \
+            libvulkan1 \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check workspace
+        run: cargo check --workspace
+
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test workspace
+        run: cargo test --workspace
+
+      - name: Check package
+        run: cargo package --allow-dirty --no-verify
