@@ -1,6 +1,6 @@
 use gpui::{
-  App, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement, KeyBinding,
-  StyleRefinement, Window, actions, div, prelude::*, rgb,
+  App, ClipboardItem, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement,
+  KeyBinding, StyleRefinement, Window, actions, div, prelude::*, rgb,
 };
 
 const DEFAULT_MACOS_KEY_BINDING: &str = "cmd-alt-i";
@@ -90,7 +90,7 @@ fn render_inspector(
     .gap_3();
   let content = if let Some(id) = active_element {
     content
-      .child(render_element_id(&id, config))
+      .child(render_element_id(&id, cx, config))
       .children(inspector_states)
   } else {
     content.child(render_empty_state(is_picking, config))
@@ -187,18 +187,31 @@ fn empty_state_copy(is_picking: bool) -> (&'static str, &'static str) {
   }
 }
 
-fn render_element_id(id: &InspectorElementId, config: &Config) -> Div {
+fn render_element_id(id: &InspectorElementId, cx: &mut Context<Inspector>, config: &Config) -> Div {
+  let source = source_location(id);
+  let global_id = id.path.global_id.to_string();
+
   section("Selected element", config)
-    .child(property("Source", source_location(id), config))
+    .child(copyable_property(
+      "gpui-devtools-copy-source",
+      "Source",
+      source.clone(),
+      source,
+      cx,
+      config,
+    ))
     .child(
       div()
         .flex()
         .gap_3()
         .child(property("Instance", id.instance_id.to_string(), config))
         .child(
-          property(
+          copyable_property(
+            "gpui-devtools-copy-global-id",
             "Global ID",
-            truncate_middle(&id.path.global_id.to_string(), 48),
+            truncate_middle(&global_id, 48),
+            global_id,
+            cx,
             config,
           )
           .w_0()
@@ -638,6 +651,48 @@ fn section(title: &'static str, config: &Config) -> Div {
 }
 
 fn property(label: &'static str, value: String, config: &Config) -> Div {
+  property_with_action(label, value, None, config)
+}
+
+fn copyable_property(
+  id: &'static str,
+  label: &'static str,
+  display_value: String,
+  copy_value: String,
+  cx: &mut Context<Inspector>,
+  config: &Config,
+) -> Div {
+  let action = div()
+    .id(id)
+    .px_1()
+    .rounded_sm()
+    .cursor_pointer()
+    .text_xs()
+    .text_color(rgb(config.accent))
+    .hover(|button| button.bg(rgb(config.background)))
+    .child("Copy")
+    .on_click(cx.listener(move |_inspector, _, _window, cx| {
+      cx.write_to_clipboard(text_clipboard_item(copy_value.clone()));
+    }));
+
+  property_with_action(
+    label,
+    display_value,
+    Some(action.into_any_element()),
+    config,
+  )
+}
+
+fn text_clipboard_item(value: String) -> ClipboardItem {
+  ClipboardItem::new_string(value)
+}
+
+fn property_with_action(
+  label: &'static str,
+  value: String,
+  action: Option<gpui::AnyElement>,
+  config: &Config,
+) -> Div {
   div()
     .overflow_hidden()
     .flex()
@@ -645,9 +700,13 @@ fn property(label: &'static str, value: String, config: &Config) -> Div {
     .gap_1()
     .child(
       div()
+        .flex()
+        .items_center()
+        .justify_between()
         .text_xs()
         .text_color(rgb(config.muted_text))
-        .child(label),
+        .child(label)
+        .when_some(action, |label, action| label.child(action)),
     )
     .child(
       div()
@@ -788,6 +847,15 @@ mod tests {
           swatch: None,
         }],
       }]
+    );
+  }
+
+  #[test]
+  fn clipboard_items_preserve_the_full_value() {
+    let value = "view-123.long-global-id";
+    assert_eq!(
+      text_clipboard_item(value.into()).text(),
+      Some(value.to_owned())
     );
   }
 
