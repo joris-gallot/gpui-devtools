@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/gpui-devtools.svg)](https://crates.io/crates/gpui-devtools)
 [![License](https://img.shields.io/crates/l/gpui-devtools.svg)](LICENSE)
 
-MIT-licensed, framework-agnostic developer tools for [GPUI](https://gpui.rs) applications.
+Framework-agnostic developer tools for [GPUI](https://gpui.rs) applications.
 
 The first release provides an element picker and inspector with:
 
@@ -55,3 +55,7 @@ The inspector relies only on GPUI's Apache-2.0 inspector hooks. Its implementati
 - focus and keybinding inspector
 - action and event timeline
 - entity lifecycle diagnostics
+
+## License
+
+[MIT](LICENSE)
