@@ -195,7 +195,15 @@ fn render_element_id(id: &InspectorElementId, config: &Config) -> Div {
         .flex()
         .gap_3()
         .child(property("Instance", id.instance_id.to_string(), config))
-        .child(property("Global ID", id.path.global_id.to_string(), config)),
+        .child(
+          property(
+            "Global ID",
+            truncate_middle(&id.path.global_id.to_string(), 48),
+            config,
+          )
+          .w_0()
+          .flex_1(),
+        ),
     )
 }
 
@@ -265,11 +273,15 @@ fn render_style_property(property: StyleProperty, config: &Config) -> Div {
     .text_xs()
     .child(
       div()
+        .flex_shrink_0()
         .text_color(rgb(config.muted_text))
         .child(property.label),
     )
     .child(
       div()
+        .w_0()
+        .flex_1()
+        .truncate()
         .font_family("monospace")
         .text_right()
         .child(property.value),
@@ -534,6 +546,7 @@ fn section(title: &'static str, config: &Config) -> Div {
 
 fn property(label: &'static str, value: String, config: &Config) -> Div {
   div()
+    .overflow_hidden()
     .flex()
     .flex_col()
     .gap_1()
@@ -543,7 +556,33 @@ fn property(label: &'static str, value: String, config: &Config) -> Div {
         .text_color(rgb(config.muted_text))
         .child(label),
     )
-    .child(div().text_sm().font_family("monospace").child(value))
+    .child(
+      div()
+        .w_full()
+        .truncate()
+        .text_sm()
+        .font_family("monospace")
+        .child(value),
+    )
+}
+
+fn truncate_middle(value: &str, max_chars: usize) -> String {
+  let chars = value.chars().collect::<Vec<_>>();
+  if chars.len() <= max_chars {
+    return value.to_owned();
+  }
+  if max_chars <= 1 {
+    return "…".chars().take(max_chars).collect();
+  }
+
+  let available = max_chars - 1;
+  let start = available.div_ceil(2);
+  let end = available - start;
+  format!(
+    "{}…{}",
+    chars[..start].iter().collect::<String>(),
+    chars[chars.len() - end..].iter().collect::<String>()
+  )
 }
 
 fn source_location(id: &InspectorElementId) -> String {
@@ -620,6 +659,13 @@ mod tests {
         }],
       }]
     );
+  }
+
+  #[test]
+  fn long_values_are_truncated_in_the_middle() {
+    assert_eq!(truncate_middle("short", 10), "short");
+    assert_eq!(truncate_middle("abcdefghijkl", 7), "abc…jkl");
+    assert_eq!(truncate_middle("abc", 1), "…");
   }
 
   #[test]
