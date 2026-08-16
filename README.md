@@ -45,8 +45,6 @@ gpui_devtools::init_with(
 );
 ```
 
-The inspector relies only on GPUI's Apache-2.0 inspector hooks. Its implementation is original and does not include Zed's GPL-licensed inspector UI.
-
 ## Roadmap
 
 - computed style view and temporary style editing
