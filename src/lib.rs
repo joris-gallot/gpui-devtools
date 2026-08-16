@@ -403,7 +403,7 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   push_debug(&mut appearance, "Opacity", style.opacity.as_ref());
   push_group(&mut groups, "Appearance", appearance);
 
-  if let Some(text) = style.text.as_ref() {
+  if let Some(text) = style.text.explicit_refinement() {
     let mut typography = Vec::new();
     push_debug(&mut typography, "Color", text.color.as_ref());
     push_debug(&mut typography, "Font family", text.font_family.as_ref());
@@ -444,6 +444,22 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   }
 
   groups
+}
+
+trait ExplicitTextRefinement {
+  fn explicit_refinement(&self) -> Option<&gpui::TextStyleRefinement>;
+}
+
+impl ExplicitTextRefinement for gpui::TextStyleRefinement {
+  fn explicit_refinement(&self) -> Option<&gpui::TextStyleRefinement> {
+    self.is_some().then_some(self)
+  }
+}
+
+impl ExplicitTextRefinement for Option<gpui::TextStyleRefinement> {
+  fn explicit_refinement(&self) -> Option<&gpui::TextStyleRefinement> {
+    self.as_ref().filter(|text| text.is_some())
+  }
 }
 
 fn push_debug<T: std::fmt::Debug>(
