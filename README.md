@@ -10,7 +10,7 @@ The first release provides an element picker and inspector with:
 
 - source locations and GPUI element IDs
 - element bounds and content size
-- raw `Div` style refinements
+- structured `Div` style refinements
 - a global toggle action and optional default keybinding
 
 ## Install
