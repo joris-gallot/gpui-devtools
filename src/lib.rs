@@ -126,8 +126,10 @@ fn render_inspector(
         .child(
           div()
             .id("gpui-devtools-pick")
+            .h(gpui::px(28.0))
             .px_2()
-            .py_1()
+            .flex()
+            .items_center()
             .rounded_md()
             .cursor_pointer()
             .border_1()
@@ -141,6 +143,7 @@ fn render_inspector(
             } else {
               rgb(config.panel_background)
             })
+            .text_xs()
             .child(if is_picking { "Picking..." } else { "Pick" })
             .on_click(cx.listener(|inspector, _, window, _cx| {
               inspector.start_picking();
