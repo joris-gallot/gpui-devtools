@@ -377,33 +377,35 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   push_group(&mut groups, "Layout", layout);
 
   let mut spacing = Vec::new();
-  push_debug(&mut spacing, "Margin top", style.margin.top.as_ref());
-  push_debug(&mut spacing, "Margin right", style.margin.right.as_ref());
-  push_debug(&mut spacing, "Margin bottom", style.margin.bottom.as_ref());
-  push_debug(&mut spacing, "Margin left", style.margin.left.as_ref());
-  push_debug(&mut spacing, "Padding top", style.padding.top.as_ref());
-  push_debug(&mut spacing, "Padding right", style.padding.right.as_ref());
-  push_debug(
+  push_compact_sides(
     &mut spacing,
-    "Padding bottom",
-    style.padding.bottom.as_ref(),
+    "Margin",
+    [
+      ("Margin top", style.margin.top.as_ref()),
+      ("Margin right", style.margin.right.as_ref()),
+      ("Margin bottom", style.margin.bottom.as_ref()),
+      ("Margin left", style.margin.left.as_ref()),
+    ],
   );
-  push_debug(&mut spacing, "Padding left", style.padding.left.as_ref());
-  push_debug(&mut spacing, "Border top", style.border_widths.top.as_ref());
-  push_debug(
+  push_compact_sides(
     &mut spacing,
-    "Border right",
-    style.border_widths.right.as_ref(),
+    "Padding",
+    [
+      ("Padding top", style.padding.top.as_ref()),
+      ("Padding right", style.padding.right.as_ref()),
+      ("Padding bottom", style.padding.bottom.as_ref()),
+      ("Padding left", style.padding.left.as_ref()),
+    ],
   );
-  push_debug(
+  push_compact_sides(
     &mut spacing,
-    "Border bottom",
-    style.border_widths.bottom.as_ref(),
-  );
-  push_debug(
-    &mut spacing,
-    "Border left",
-    style.border_widths.left.as_ref(),
+    "Border",
+    [
+      ("Border top", style.border_widths.top.as_ref()),
+      ("Border right", style.border_widths.right.as_ref()),
+      ("Border bottom", style.border_widths.bottom.as_ref()),
+      ("Border left", style.border_widths.left.as_ref()),
+    ],
   );
   push_group(&mut groups, "Spacing", spacing);
 
@@ -411,25 +413,21 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   push_fill(&mut appearance, "Background", style.background.as_ref());
   push_color(&mut appearance, "Border color", style.border_color.as_ref());
   push_debug(&mut appearance, "Border style", style.border_style.as_ref());
-  push_debug(
+  push_compact_sides(
     &mut appearance,
-    "Radius top left",
-    style.corner_radii.top_left.as_ref(),
-  );
-  push_debug(
-    &mut appearance,
-    "Radius top right",
-    style.corner_radii.top_right.as_ref(),
-  );
-  push_debug(
-    &mut appearance,
-    "Radius bottom right",
-    style.corner_radii.bottom_right.as_ref(),
-  );
-  push_debug(
-    &mut appearance,
-    "Radius bottom left",
-    style.corner_radii.bottom_left.as_ref(),
+    "Radius",
+    [
+      ("Radius top left", style.corner_radii.top_left.as_ref()),
+      ("Radius top right", style.corner_radii.top_right.as_ref()),
+      (
+        "Radius bottom right",
+        style.corner_radii.bottom_right.as_ref(),
+      ),
+      (
+        "Radius bottom left",
+        style.corner_radii.bottom_left.as_ref(),
+      ),
+    ],
   );
   push_debug(&mut appearance, "Box shadow", style.box_shadow.as_ref());
   push_debug(&mut appearance, "Cursor", style.mouse_cursor.as_ref());
@@ -529,6 +527,43 @@ fn format_color(color: gpui::Hsla) -> String {
   } else {
     format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}")
   }
+}
+
+fn push_compact_sides<T: std::fmt::Debug + PartialEq>(
+  properties: &mut Vec<StyleProperty>,
+  label: &'static str,
+  sides: [(&'static str, Option<&T>); 4],
+) {
+  let [
+    (top_label, top),
+    (right_label, right),
+    (bottom_label, bottom),
+    (left_label, left),
+  ] = sides;
+
+  if let (Some(top), Some(right), Some(bottom), Some(left)) = (top, right, bottom, left) {
+    if top == right && top == bottom && top == left {
+      push_value(properties, label, format!("{top:?}"));
+      return;
+    }
+    if top == bottom && right == left {
+      push_value(properties, label, format!("{top:?} {right:?}"));
+      return;
+    }
+  }
+
+  push_debug(properties, top_label, top);
+  push_debug(properties, right_label, right);
+  push_debug(properties, bottom_label, bottom);
+  push_debug(properties, left_label, left);
+}
+
+fn push_value(properties: &mut Vec<StyleProperty>, label: &'static str, value: String) {
+  properties.push(StyleProperty {
+    label,
+    value,
+    swatch: None,
+  });
 }
 
 fn push_debug<T: std::fmt::Debug>(
@@ -699,6 +734,42 @@ mod tests {
   fn empty_state_copy_matches_picker_state() {
     assert_eq!(empty_state_copy(true).0, "Pick an element");
     assert_eq!(empty_state_copy(false).0, "No element selected");
+  }
+
+  #[test]
+  fn equal_and_opposite_sides_are_compacted() {
+    let mut properties = Vec::new();
+    push_compact_sides(
+      &mut properties,
+      "Padding",
+      [
+        ("Padding top", Some(&1)),
+        ("Padding right", Some(&2)),
+        ("Padding bottom", Some(&1)),
+        ("Padding left", Some(&2)),
+      ],
+    );
+    assert_eq!(
+      properties,
+      vec![StyleProperty {
+        label: "Padding",
+        value: "1 2".into(),
+        swatch: None,
+      }]
+    );
+
+    properties.clear();
+    push_compact_sides(
+      &mut properties,
+      "Border",
+      [
+        ("Border top", Some(&1)),
+        ("Border right", Some(&1)),
+        ("Border bottom", Some(&1)),
+        ("Border left", Some(&1)),
+      ],
+    );
+    assert_eq!(properties[0].value, "1");
   }
 
   #[test]
