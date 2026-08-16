@@ -1,13 +1,15 @@
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
   App, ClipboardItem, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement,
-  KeyBinding, StyleRefinement, Window, actions, div, prelude::*, rgb,
+  KeyBinding, StyleRefinement, Window, actions, div, img, prelude::*, rgb,
 };
 
 const DEFAULT_MACOS_KEY_BINDING: &str = "cmd-alt-i";
 const DEFAULT_OTHER_KEY_BINDING: &str = "ctrl-alt-i";
 const COPY_FEEDBACK_DURATION: Duration = Duration::from_millis(1500);
+const PICK_ICON_SVG: &[u8] = include_bytes!("../assets/icons/square-dashed-mouse-pointer.svg");
+const CLOSE_ICON_SVG: &[u8] = include_bytes!("../assets/icons/x.svg");
 
 actions!(gpui_devtools, [ToggleInspector]);
 
@@ -101,6 +103,45 @@ fn render_inspector(
     content.child(render_empty_state(is_picking, config))
   };
 
+  let pick_button = div()
+    .id("gpui-devtools-pick")
+    .size(gpui::px(28.0))
+    .flex()
+    .items_center()
+    .justify_center()
+    .rounded_md()
+    .cursor_pointer()
+    .border_1()
+    .border_color(if is_picking {
+      rgb(config.accent)
+    } else {
+      rgb(config.border)
+    })
+    .bg(if is_picking {
+      rgb(config.accent)
+    } else {
+      rgb(config.panel_background)
+    })
+    .hover(|button| button.border_color(rgb(config.accent)))
+    .child(render_icon(PICK_ICON_SVG, config.text).size_4())
+    .on_click(cx.listener(|inspector, _, window, _cx| {
+      inspector.start_picking();
+      window.refresh();
+    }));
+  let close_button = div()
+    .id("gpui-devtools-close")
+    .size(gpui::px(28.0))
+    .flex()
+    .items_center()
+    .justify_center()
+    .rounded_md()
+    .cursor_pointer()
+    .hover(|button| button.bg(rgb(config.panel_background)))
+    .child(render_icon(CLOSE_ICON_SVG, config.muted_text).size_4())
+    .on_click(cx.listener(|_inspector, _, window, cx| {
+      window.toggle_inspector(cx);
+    }));
+
   div()
     .size_full()
     .flex()
@@ -120,38 +161,33 @@ fn render_inspector(
         .border_color(rgb(config.border))
         .child(
           div()
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .child("GPUI DevTools"),
-        )
-        .child(
-          div()
-            .id("gpui-devtools-pick")
-            .h(gpui::px(28.0))
-            .px_2()
             .flex()
             .items_center()
-            .rounded_md()
-            .cursor_pointer()
-            .border_1()
-            .border_color(if is_picking {
-              rgb(config.accent)
-            } else {
-              rgb(config.border)
-            })
-            .bg(if is_picking {
-              rgb(config.accent)
-            } else {
-              rgb(config.panel_background)
-            })
-            .text_xs()
-            .child(if is_picking { "Picking..." } else { "Pick" })
-            .on_click(cx.listener(|inspector, _, window, _cx| {
-              inspector.start_picking();
-              window.refresh();
-            })),
-        ),
+            .gap_2()
+            .child(pick_button)
+            .child(
+              div()
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child("GPUI DevTools"),
+            ),
+        )
+        .child(close_button),
     )
     .child(content)
+}
+
+fn render_icon(svg: &'static [u8], color: u32) -> gpui::Img {
+  img(Arc::new(gpui::Image::from_bytes(
+    gpui::ImageFormat::Svg,
+    recolor_svg(svg, color),
+  )))
+}
+
+fn recolor_svg(svg: &[u8], color: u32) -> Vec<u8> {
+  let color = format!("#{:06x}", color & 0xffffff);
+  String::from_utf8_lossy(svg)
+    .replace("currentColor", &color)
+    .into_bytes()
 }
 
 fn render_empty_state(is_picking: bool, config: &Config) -> Div {
@@ -971,6 +1007,14 @@ mod tests {
     assert_eq!(truncate_middle("short", 10), "short");
     assert_eq!(truncate_middle("abcdefghijkl", 7), "abc…jkl");
     assert_eq!(truncate_middle("abc", 1), "…");
+  }
+
+  #[test]
+  fn svg_icons_use_the_configured_color() {
+    assert_eq!(
+      recolor_svg(b"<svg stroke=\"currentColor\" />", 0x12abef),
+      b"<svg stroke=\"#12abef\" />"
+    );
   }
 
   #[test]
