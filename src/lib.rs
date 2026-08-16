@@ -78,6 +78,23 @@ fn render_inspector(
     config: &Config,
 ) -> Div {
     let active_element = inspector.active_element_id().cloned();
+    let is_picking = inspector.is_picking();
+    let inspector_states = inspector.render_inspector_states(window, cx);
+    let content = div()
+        .id("gpui-devtools-content")
+        .flex_1()
+        .overflow_y_scroll()
+        .p_3()
+        .flex()
+        .flex_col()
+        .gap_3();
+    let content = if let Some(id) = active_element {
+        content
+            .child(render_element_id(&id, config))
+            .children(inspector_states)
+    } else {
+        content.child(render_empty_state(is_picking, config))
+    };
 
     div()
         .size_full()
@@ -108,57 +125,133 @@ fn render_inspector(
                         .py_1()
                         .rounded_md()
                         .cursor_pointer()
-                        .bg(if inspector.is_picking() {
+                        .border_1()
+                        .border_color(if is_picking {
+                            rgb(config.accent)
+                        } else {
+                            rgb(config.border)
+                        })
+                        .bg(if is_picking {
                             rgb(config.accent)
                         } else {
                             rgb(config.panel_background)
                         })
-                        .child(if inspector.is_picking() {
-                            "Picking"
-                        } else {
-                            "Pick"
-                        })
+                        .child(if is_picking { "Picking..." } else { "Pick" })
                         .on_click(cx.listener(|inspector, _, window, _cx| {
                             inspector.start_picking();
                             window.refresh();
                         })),
                 ),
         )
+        .child(content)
+}
+
+fn render_empty_state(is_picking: bool, config: &Config) -> Div {
+    let (title, description) = empty_state_copy(is_picking);
+
+    div()
+        .flex_1()
+        .py_12()
+        .px_4()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap_2()
+        .text_center()
         .child(
             div()
-                .id("gpui-devtools-content")
-                .flex_1()
-                .overflow_y_scroll()
-                .p_3()
-                .flex()
-                .flex_col()
-                .gap_3()
-                .when_some(active_element, |panel, id| {
-                    panel.child(render_element_id(&id, config))
-                })
-                .children(inspector.render_inspector_states(window, cx)),
+                .text_lg()
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child(title),
+        )
+        .child(
+            div()
+                .text_sm()
+                .text_color(rgb(config.muted_text))
+                .child(description),
         )
 }
 
-fn render_element_id(id: &InspectorElementId, config: &Config) -> Div {
-    let location = source_location(id);
+fn empty_state_copy(is_picking: bool) -> (&'static str, &'static str) {
+    if is_picking {
+        (
+            "Pick an element",
+            "Move over the application and click to inspect.",
+        )
+    } else {
+        (
+            "No element selected",
+            "Use Pick to select an element in the application.",
+        )
+    }
+}
 
-    section("Element", config)
-        .child(property("Source", location, config))
-        .child(property("Instance", id.instance_id.to_string(), config))
-        .child(property("Global ID", id.path.global_id.to_string(), config))
+fn render_element_id(id: &InspectorElementId, config: &Config) -> Div {
+    section("Selected element", config)
+        .child(property("Source", source_location(id), config))
+        .child(
+            div()
+                .flex()
+                .gap_3()
+                .child(property("Instance", id.instance_id.to_string(), config))
+                .child(property("Global ID", id.path.global_id.to_string(), config)),
+        )
 }
 
 fn render_div_state(state: &DivInspectorState, config: &Config) -> Div {
-    section("Layout", config)
-        .child(property("Origin", state.bounds.origin.to_string(), config))
-        .child(property("Size", state.bounds.size.to_string(), config))
-        .child(property("Content", state.content_size.to_string(), config))
-        .child(property(
-            "Style refinement",
+    div()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .child(
+            section("Layout", config)
+                .child(render_geometry(state, config))
+                .child(property("Origin", state.bounds.origin.to_string(), config)),
+        )
+        .child(section("Style", config).child(property(
+            "Refinement",
             format!("{:#?}", state.base_style),
             config,
+        )))
+}
+
+fn render_geometry(state: &DivInspectorState, config: &Config) -> Div {
+    div()
+        .p_2()
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(config.accent))
+        .bg(rgb(config.background))
+        .child(geometry_label(
+            "Element",
+            state.bounds.size.to_string(),
+            config,
         ))
+        .child(
+            div()
+                .mt_2()
+                .p_3()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(config.border))
+                .bg(rgb(config.panel_background))
+                .child(geometry_label(
+                    "Content",
+                    state.content_size.to_string(),
+                    config,
+                )),
+        )
+}
+
+fn geometry_label(label: &'static str, value: String, config: &Config) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .text_xs()
+        .child(div().text_color(rgb(config.muted_text)).child(label))
+        .child(div().font_family("monospace").child(value))
 }
 
 fn section(title: &'static str, config: &Config) -> Div {
@@ -192,10 +285,25 @@ fn source_location(id: &InspectorElementId) -> String {
     let location = id.path.source_location;
     format!(
         "{}:{}:{}",
-        location.file(),
+        compact_source_path(location.file()),
         location.line(),
         location.column()
     )
+}
+
+fn compact_source_path(file: &str) -> String {
+    let components = std::path::Path::new(file)
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(component) => component.to_str(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let start = components
+        .iter()
+        .rposition(|component| *component == "src")
+        .unwrap_or_else(|| components.len().saturating_sub(1));
+    components[start..].join("/")
 }
 
 const fn default_key_binding() -> &'static str {
@@ -223,5 +331,20 @@ mod tests {
             "ctrl-alt-i"
         };
         assert_eq!(default_key_binding(), expected);
+    }
+
+    #[test]
+    fn empty_state_copy_matches_picker_state() {
+        assert_eq!(empty_state_copy(true).0, "Pick an element");
+        assert_eq!(empty_state_copy(false).0, "No element selected");
+    }
+
+    #[test]
+    fn source_paths_are_compact() {
+        assert_eq!(
+            compact_source_path("/workspace/app/src/views/card.rs"),
+            "src/views/card.rs"
+        );
+        assert_eq!(compact_source_path("main.rs"), "main.rs");
     }
 }
