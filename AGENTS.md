@@ -18,6 +18,7 @@ The goal is to provide Chrome DevTools-like inspection and diagnostics for GPUI 
 ## Architecture
 
 - `src/lib.rs`: public API and inspector implementation.
+- `tests/inspector.rs`: GPUI interaction tests driven through the public API.
 - `examples/basic/`: minimal standalone application for visual testing.
 
 Keep the core crate independent from Zed UI and `gpui-component`.

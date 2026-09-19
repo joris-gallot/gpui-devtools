@@ -105,6 +105,7 @@ fn render_inspector(
 
   let pick_button = div()
     .id("gpui-devtools-pick")
+    .debug_selector(|| "gpui-devtools-pick".into())
     .size(gpui::px(28.0))
     .flex()
     .items_center()
@@ -130,6 +131,7 @@ fn render_inspector(
     }));
   let close_button = div()
     .id("gpui-devtools-close")
+    .debug_selector(|| "gpui-devtools-close".into())
     .size(gpui::px(28.0))
     .flex()
     .items_center()
@@ -772,6 +774,7 @@ fn copyable_property(
   let copy_feedback = Rc::clone(copy_feedback);
   let action = div()
     .id(id)
+    .debug_selector(|| id.into())
     .w(gpui::px(56.0))
     .px_1()
     .rounded_sm()
