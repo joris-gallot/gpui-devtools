@@ -15,31 +15,25 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  validate:
+  lint:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Install GPUI system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            libasound2-dev \
-            libfontconfig-dev \
-            libglib2.0-dev \
-            libssl-dev \
-            libvulkan1 \
-            libwayland-dev \
-            libx11-xcb-dev \
-            libxkbcommon-x11-dev \
-            libzstd-dev
+        run: script/install-linux-deps.sh
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
 
       - name: Update to latest compatible dependencies
         if: github.event_name == 'schedule'
@@ -48,14 +42,43 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Check workspace
-        run: cargo check --workspace
+      - name: Check dependencies
+        run: cargo deny check
+
+      - name: Check docs
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+      - name: Check publish
+        run: cargo publish --dry-run --allow-dirty -p gpui-devtools
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GPUI system dependencies
+        if: runner.os == 'Linux'
+        run: script/install-linux-deps.sh
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Update to latest compatible dependencies
+        if: github.event_name == 'schedule'
+        run: cargo update
 
       - name: Lint workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test workspace
         run: cargo test --workspace
-
-      - name: Check package
-        run: cargo package --allow-dirty --no-verify
