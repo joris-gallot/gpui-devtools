@@ -15,7 +15,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lint:
+  checks:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,8 +79,8 @@ jobs:
         if: github.event_name == 'schedule'
         run: cargo update
 
-      - name: Lint workspace
+      - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Test workspace
+      - name: Tests
         run: cargo test --workspace
