@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,10 +27,12 @@ jobs:
             libasound2-dev \
             libfontconfig-dev \
             libglib2.0-dev \
+            libssl-dev \
             libvulkan1 \
             libwayland-dev \
             libx11-xcb-dev \
-            libxkbcommon-x11-dev
+            libxkbcommon-x11-dev \
+            libzstd-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -35,6 +40,10 @@ jobs:
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Update to latest compatible dependencies
+        if: github.event_name == 'schedule'
+        run: cargo update
 
       - name: Check formatting
         run: cargo fmt --all -- --check

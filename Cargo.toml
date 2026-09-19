@@ -1,6 +1,6 @@
 [package]
 name = "gpui-devtools"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "Developer tools for inspecting and debugging GPUI applications"
 license = "MIT"
@@ -9,7 +9,7 @@ keywords = ["gpui", "devtools", "inspector", "debugging"]
 categories = ["development-tools::debugging", "gui"]
 
 [dependencies]
-gpui = { version = "0.2.2", features = ["inspector"] }
+gpui = { package = "gpui-pre", version = "0.3.5", features = ["inspector"] }
 
 [workspace]
 members = ["examples/basic"]

@@ -1,6 +1,6 @@
 use gpui::{
-  App, AppContext, Application, Bounds, Context, Window, WindowBounds, WindowOptions, div,
-  prelude::*, px, rgb, size,
+  App, AppContext, Bounds, Context, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb,
+  size,
 };
 
 struct Demo;
@@ -33,7 +33,7 @@ impl Render for Demo {
 }
 
 fn main() {
-  Application::new().run(|cx: &mut App| {
+  gpui_platform::application().run(|cx: &mut App| {
     gpui_devtools::init(cx);
 
     let bounds = Bounds::centered(None, size(px(900.0), px(600.0)), cx);

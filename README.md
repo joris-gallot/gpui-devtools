@@ -21,10 +21,16 @@ The inspector includes:
 devtools = ["dep:gpui-devtools", "gpui/inspector"]
 
 [dependencies]
-gpui-devtools = { version = "0.2", optional = true }
+gpui = { package = "gpui-pre", version = "0.3" }
+gpui-devtools = { version = "0.3", optional = true }
 ```
 
-Version 0.2 is compatible with GPUI 0.2.
+GPUI DevTools 0.3 targets [`gpui-pre`](https://crates.io/crates/gpui-pre) 0.3, the crates.io snapshot of Zed's GPUI also used by [gpui-kit](https://github.com/longbridge/gpui-kit). Your application must resolve to the same GPUI crate, otherwise Cargo builds two incompatible copies.
+
+| gpui-devtools | GPUI |
+| --- | --- |
+| 0.3 | `gpui-pre` 0.3 |
+| 0.2 | `gpui` 0.2 |
 
 ## Use
 

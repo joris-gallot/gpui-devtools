@@ -1,0 +1,34 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "mode": "full",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "rangeStrategy": "replace",
+  "platformAutomerge": true,
+  "minimumReleaseAge": "3 days",
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "gpui-pre and gpui-pre-platform must resolve to the same GPUI snapshot, and 0.x minor releases break the API. Bump together and review manually.",
+      "groupName": "gpui-pre",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "gpui-pre",
+        "gpui-pre-platform"
+      ],
+      "automerge": false
+    }
+  ]
+}
