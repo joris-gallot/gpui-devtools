@@ -501,7 +501,7 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
       ),
     ],
   );
-  push_debug(&mut appearance, "Box shadow", style.box_shadow.as_ref());
+  push_shadows(&mut appearance, "Box shadow", style.box_shadow.as_ref());
   push_debug(&mut appearance, "Cursor", style.mouse_cursor.as_ref());
   push_debug(&mut appearance, "Opacity", style.opacity.as_ref());
   push_group(&mut groups, "Appearance", appearance);
@@ -509,17 +509,9 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
   if let Some(text) = style.text.explicit_refinement() {
     let mut typography = Vec::new();
     push_color(&mut typography, "Color", text.color.as_ref());
-    push_debug(&mut typography, "Font family", text.font_family.as_ref());
-    push_debug(
-      &mut typography,
-      "Font features",
-      text.font_features.as_ref(),
-    );
-    push_debug(
-      &mut typography,
-      "Font fallbacks",
-      text.font_fallbacks.as_ref(),
-    );
+    push_text(&mut typography, "Font family", text.font_family.as_ref());
+    push_font_features(&mut typography, text.font_features.as_ref());
+    push_font_fallbacks(&mut typography, text.font_fallbacks.as_ref());
     push_debug(&mut typography, "Font size", text.font_size.as_ref());
     push_debug(&mut typography, "Line height", text.line_height.as_ref());
     push_debug(&mut typography, "Font weight", text.font_weight.as_ref());
@@ -529,18 +521,10 @@ fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
       "Background",
       text.background_color.as_ref(),
     );
-    push_debug(&mut typography, "Underline", text.underline.as_ref());
-    push_debug(
-      &mut typography,
-      "Strikethrough",
-      text.strikethrough.as_ref(),
-    );
+    push_underline(&mut typography, text.underline.as_ref());
+    push_strikethrough(&mut typography, text.strikethrough.as_ref());
     push_debug(&mut typography, "White space", text.white_space.as_ref());
-    push_debug(
-      &mut typography,
-      "Text overflow",
-      text.text_overflow.as_ref(),
-    );
+    push_text_overflow(&mut typography, text.text_overflow.as_ref());
     push_debug(&mut typography, "Text align", text.text_align.as_ref());
     push_debug(&mut typography, "Line clamp", text.line_clamp.as_ref());
     push_group(&mut groups, "Typography", typography);
@@ -565,6 +549,121 @@ impl ExplicitTextRefinement for Option<gpui::TextStyleRefinement> {
   }
 }
 
+fn push_shadows(
+  properties: &mut Vec<StyleProperty>,
+  label: &'static str,
+  shadows: Option<&Vec<gpui::BoxShadow>>,
+) {
+  let Some(shadows) = shadows.filter(|shadows| !shadows.is_empty()) else {
+    return;
+  };
+
+  push_value(
+    properties,
+    label,
+    shadows
+      .iter()
+      .map(format_shadow)
+      .collect::<Vec<_>>()
+      .join(", "),
+  );
+}
+
+fn format_shadow(shadow: &gpui::BoxShadow) -> String {
+  let inset = if shadow.inset { "inset " } else { "" };
+  format!(
+    "{inset}{} {} {} {} {}",
+    shadow.offset.x,
+    shadow.offset.y,
+    shadow.blur_radius,
+    shadow.spread_radius,
+    format_color(shadow.color)
+  )
+}
+
+fn push_underline(properties: &mut Vec<StyleProperty>, underline: Option<&gpui::UnderlineStyle>) {
+  if let Some(underline) = underline {
+    let wavy = if underline.wavy { "wavy " } else { "" };
+    push_value(
+      properties,
+      "Underline",
+      match underline.color {
+        Some(color) => format!("{wavy}{} {}", underline.thickness, format_color(color)),
+        None => format!("{wavy}{}", underline.thickness),
+      },
+    );
+  }
+}
+
+fn push_strikethrough(
+  properties: &mut Vec<StyleProperty>,
+  strikethrough: Option<&gpui::StrikethroughStyle>,
+) {
+  if let Some(strikethrough) = strikethrough {
+    push_value(
+      properties,
+      "Strikethrough",
+      match strikethrough.color {
+        Some(color) => format!("{} {}", strikethrough.thickness, format_color(color)),
+        None => strikethrough.thickness.to_string(),
+      },
+    );
+  }
+}
+
+fn push_text_overflow(properties: &mut Vec<StyleProperty>, overflow: Option<&gpui::TextOverflow>) {
+  if let Some(overflow) = overflow {
+    let (position, ellipsis) = match overflow {
+      gpui::TextOverflow::Truncate(ellipsis) => ("Truncate end", ellipsis),
+      gpui::TextOverflow::TruncateStart(ellipsis) => ("Truncate start", ellipsis),
+      gpui::TextOverflow::TruncateMiddle(ellipsis) => ("Truncate middle", ellipsis),
+    };
+    push_value(
+      properties,
+      "Text overflow",
+      format!("{position} {ellipsis}"),
+    );
+  }
+}
+
+fn push_font_features(properties: &mut Vec<StyleProperty>, features: Option<&gpui::FontFeatures>) {
+  let Some(features) = features.filter(|features| !features.0.is_empty()) else {
+    return;
+  };
+
+  push_value(
+    properties,
+    "Font features",
+    features
+      .0
+      .iter()
+      .map(|(feature, value)| format!("{feature} {value}"))
+      .collect::<Vec<_>>()
+      .join(", "),
+  );
+}
+
+fn push_font_fallbacks(
+  properties: &mut Vec<StyleProperty>,
+  fallbacks: Option<&gpui::FontFallbacks>,
+) {
+  let Some(fallbacks) = fallbacks.filter(|fallbacks| !fallbacks.0.is_empty()) else {
+    return;
+  };
+
+  push_value(properties, "Font fallbacks", fallbacks.0.join(", "));
+}
+
+fn push_text(
+  properties: &mut Vec<StyleProperty>,
+  label: &'static str,
+  value: Option<&gpui::SharedString>,
+) {
+  if let Some(value) = value {
+    push_value(properties, label, value.to_string());
+  }
+}
+
 fn push_color(
   properties: &mut Vec<StyleProperty>,
   label: &'static str,
@@ -583,9 +682,18 @@ fn push_fill(properties: &mut Vec<StyleProperty>, label: &'static str, fill: Opt
   if let Some(fill) = fill {
     properties.push(StyleProperty {
       label,
-      value: "Color".into(),
+      value: format_fill(fill),
       swatch: Some(fill.clone()),
     });
+  }
+}
+
+fn format_fill(fill: &gpui::Fill) -> String {
+  match fill.color().and_then(|background| background.as_solid()) {
+    Some(color) => format_color(color),
+    None => match fill {
+      gpui::Fill::Color(background) => format!("{background:?}"),
+    },
   }
 }
 
@@ -997,6 +1105,130 @@ mod tests {
       text_clipboard_item(value.into()).text(),
       Some(value.to_owned())
     );
+  }
+
+  #[test]
+  fn shadows_are_formatted_like_css() {
+    let mut properties = Vec::new();
+    push_shadows(
+      &mut properties,
+      "Box shadow",
+      Some(&vec![
+        gpui::BoxShadow {
+          color: gpui::hsla(0.0, 0.0, 0.0, 0.1),
+          offset: gpui::point(gpui::px(0.0), gpui::px(4.0)),
+          blur_radius: gpui::px(6.0),
+          spread_radius: gpui::px(-1.0),
+          inset: false,
+        },
+        gpui::BoxShadow {
+          color: gpui::white(),
+          offset: gpui::point(gpui::px(1.0), gpui::px(2.0)),
+          blur_radius: gpui::px(3.0),
+          spread_radius: gpui::px(0.0),
+          inset: true,
+        },
+      ]),
+    );
+    assert_eq!(
+      properties[0].value,
+      "0px 4px 6px -1px #0000001a, inset 1px 2px 3px 0px #ffffff"
+    );
+  }
+
+  #[test]
+  fn empty_shadow_lists_are_skipped() {
+    let mut properties = Vec::new();
+    push_shadows(&mut properties, "Box shadow", Some(&Vec::new()));
+    assert!(properties.is_empty());
+  }
+
+  #[test]
+  fn solid_fills_show_their_color() {
+    assert_eq!(format_fill(&gpui::Fill::from(gpui::white())), "#ffffff");
+  }
+
+  #[test]
+  fn underlines_include_color_and_waviness() {
+    let mut properties = Vec::new();
+    push_underline(
+      &mut properties,
+      Some(&gpui::UnderlineStyle {
+        thickness: gpui::px(1.0),
+        color: None,
+        wavy: false,
+      }),
+    );
+    push_underline(
+      &mut properties,
+      Some(&gpui::UnderlineStyle {
+        thickness: gpui::px(2.0),
+        color: Some(gpui::white()),
+        wavy: true,
+      }),
+    );
+    assert_eq!(properties[0].value, "1px");
+    assert_eq!(properties[1].value, "wavy 2px #ffffff");
+  }
+
+  #[test]
+  fn strikethroughs_include_color() {
+    let mut properties = Vec::new();
+    push_strikethrough(
+      &mut properties,
+      Some(&gpui::StrikethroughStyle {
+        thickness: gpui::px(1.0),
+        color: Some(gpui::white()),
+      }),
+    );
+    assert_eq!(properties[0].value, "1px #ffffff");
+  }
+
+  #[test]
+  fn text_overflow_names_the_truncated_side() {
+    let mut properties = Vec::new();
+    push_text_overflow(
+      &mut properties,
+      Some(&gpui::TextOverflow::TruncateMiddle("…".into())),
+    );
+    assert_eq!(properties[0].value, "Truncate middle …");
+  }
+
+  #[test]
+  fn font_values_are_not_debug_quoted() {
+    let mut properties = Vec::new();
+    push_text(&mut properties, "Font family", Some(&"monospace".into()));
+    push_font_fallbacks(
+      &mut properties,
+      Some(&gpui::FontFallbacks::from_fonts(vec![
+        "Zed Mono".into(),
+        "Menlo".into(),
+      ])),
+    );
+    push_font_features(
+      &mut properties,
+      Some(&gpui::FontFeatures(std::sync::Arc::new(vec![(
+        "calt".into(),
+        0,
+      )]))),
+    );
+    assert_eq!(properties[0].value, "monospace");
+    assert_eq!(properties[1].value, "Zed Mono, Menlo");
+    assert_eq!(properties[2].value, "calt 0");
+  }
+
+  #[test]
+  fn empty_font_lists_are_skipped() {
+    let mut properties = Vec::new();
+    push_font_fallbacks(
+      &mut properties,
+      Some(&gpui::FontFallbacks::from_fonts(vec![])),
+    );
+    push_font_features(
+      &mut properties,
+      Some(&gpui::FontFeatures(std::sync::Arc::new(Vec::new()))),
+    );
+    assert!(properties.is_empty());
   }
 
   #[test]
