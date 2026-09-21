@@ -1,3 +1,26 @@
+//! Developer tools for inspecting and debugging [GPUI](https://gpui.rs) applications.
+//!
+//! The inspector renders next to the application window and shows the picked element's source
+//! location, GPUI element ID, bounds, content size and `Div` style refinements.
+//!
+//! Install it once the rest of the application is initialized, after any library that registers
+//! its own inspector renderer:
+//!
+//! ```
+//! # use gpui::App;
+//! fn setup_devtools(cx: &mut App) {
+//!   gpui_devtools::init(cx);
+//! }
+//! ```
+//!
+//! This binds [`ToggleInspector`] to `cmd-alt-i` on macOS and `ctrl-alt-i` elsewhere. Use
+//! [`init_with`] with a [`Config`] to change the key binding or the panel colors.
+//!
+//! GPUI only builds its inspector with the `inspector` feature or in debug builds, so gate this
+//! crate behind a feature of your own to keep it out of release builds.
+
+#![warn(missing_docs)]
+
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
@@ -11,16 +34,34 @@ const COPY_FEEDBACK_DURATION: Duration = Duration::from_millis(1500);
 const PICK_ICON_SVG: &[u8] = include_bytes!("../assets/icons/square-dashed-mouse-pointer.svg");
 const CLOSE_ICON_SVG: &[u8] = include_bytes!("../assets/icons/x.svg");
 
-actions!(gpui_devtools, [ToggleInspector]);
+actions!(
+  gpui_devtools,
+  [
+    /// Shows or hides the inspector in the active window.
+    ToggleInspector
+  ]
+);
 
+/// Installation options for the inspector.
+///
+/// Colors are `0xRRGGBB` values, matching [`gpui::rgb`].
 #[derive(Clone, Debug)]
 pub struct Config {
+  /// Key binding for [`ToggleInspector`], or `None` to register none.
+  ///
+  /// Defaults to `cmd-alt-i` on macOS and `ctrl-alt-i` elsewhere.
   pub key_binding: Option<&'static str>,
+  /// Background of the inspector panel.
   pub background: u32,
+  /// Background of sections and controls inside the panel.
   pub panel_background: u32,
+  /// Color of borders and separators.
   pub border: u32,
+  /// Color of primary text.
   pub text: u32,
+  /// Color of labels and secondary text.
   pub muted_text: u32,
+  /// Color of highlights, such as the active picker and group headings.
   pub accent: u32,
 }
 
@@ -39,16 +80,39 @@ impl Default for Config {
 }
 
 impl Config {
+  /// Sets the key binding for [`ToggleInspector`], or removes it with `None`.
+  ///
+  /// ```
+  /// let config = gpui_devtools::Config::default().key_binding(Some("ctrl-shift-i"));
+  /// ```
   pub fn key_binding(mut self, key_binding: Option<&'static str>) -> Self {
     self.key_binding = key_binding;
     self
   }
 }
 
+/// Installs the inspector with the default configuration.
+///
+/// See [`init_with`] to customize it.
 pub fn init(cx: &mut App) {
   init_with(Config::default(), cx);
 }
 
+/// Installs the inspector with the given configuration.
+///
+/// This binds the configured key, handles [`ToggleInspector`], and registers the inspector
+/// renderer. Call it after libraries that register their own renderer, since GPUI keeps only the
+/// last one.
+///
+/// ```
+/// # use gpui::App;
+/// fn setup_devtools(cx: &mut App) {
+///   gpui_devtools::init_with(
+///     gpui_devtools::Config::default().key_binding(None),
+///     cx,
+///   );
+/// }
+/// ```
 pub fn init_with(config: Config, cx: &mut App) {
   if let Some(key_binding) = config.key_binding {
     cx.bind_keys([KeyBinding::new(key_binding, ToggleInspector, None)]);
@@ -67,6 +131,10 @@ pub fn init_with(config: Config, cx: &mut App) {
   }));
 }
 
+/// Shows or hides the inspector in the active window.
+///
+/// Does nothing when no window is active. Dispatching [`ToggleInspector`] calls this, so you only
+/// need it to drive the inspector from your own code.
 pub fn toggle_active_window(cx: &mut App) {
   let Some(active_window) = cx.active_window() else {
     return;
