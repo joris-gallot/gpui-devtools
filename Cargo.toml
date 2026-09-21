@@ -1,6 +1,6 @@
 [package]
 name = "gpui-devtools"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Developer tools for inspecting and debugging GPUI applications"
 license = "MIT"
@@ -10,10 +10,10 @@ categories = ["development-tools::debugging", "gui"]
 include = ["src/**", "assets/**", "README.md", "LICENSE"]
 
 [dependencies]
-gpui = { package = "gpui-pre", version = "0.3.5", features = ["inspector"] }
+gpui = { package = "gpui-pre", version = "0.3.6", features = ["inspector"] }
 
 [dev-dependencies]
-gpui = { package = "gpui-pre", version = "0.3.5", features = ["inspector", "test-support"] }
+gpui = { package = "gpui-pre", version = "0.3.6", features = ["inspector", "test-support"] }
 
 [workspace]
 members = ["examples/basic"]

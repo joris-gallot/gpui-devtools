@@ -121,8 +121,11 @@ pub fn init_with(config: Config, cx: &mut App) {
   cx.on_action(|_: &ToggleInspector, cx| toggle_active_window(cx));
 
   let div_config = config.clone();
-  cx.register_inspector_element(move |_id, state: &DivInspectorState, _window, _cx| {
-    render_div_state(state, &div_config)
+  cx.register_inspector_element(move |_window, _cx| {
+    let div_config = div_config.clone();
+    move |_id, state: &DivInspectorState, _window: &mut Window, _cx: &mut App| {
+      render_div_state(state, &div_config)
+    }
   });
 
   let copy_feedback = Rc::new(RefCell::new(CopyFeedback::default()));
