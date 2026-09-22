@@ -396,23 +396,28 @@ fn render_style_group(group: StyleGroup, config: &Config) -> Div {
         .text_color(rgb(config.accent))
         .child(group.label),
     )
-    .children(
+    .children({
+      let count = group.properties.len();
       group
         .properties
         .into_iter()
-        .map(|property| render_style_property(property, config)),
-    )
+        .enumerate()
+        .map(move |(index, property)| {
+          render_style_property(property, index + 1 < count, config)
+        })
+    })
 }
 
-fn render_style_property(property: StyleProperty, config: &Config) -> Div {
+fn render_style_property(property: StyleProperty, show_separator: bool, config: &Config) -> Div {
   div()
     .py_1()
     .flex()
     .items_start()
     .justify_between()
     .gap_3()
-    .border_b_1()
-    .border_color(rgb(config.border))
+    .when(show_separator, |row| {
+      row.border_b_1().border_color(rgb(config.border))
+    })
     .text_xs()
     .child(
       div()
