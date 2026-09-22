@@ -18,6 +18,7 @@ impl Render for Demo {
     div()
       .id("app-root")
       .size_full()
+      .overflow_hidden()
       .flex()
       .bg(rgb(0x101318))
       .text_color(rgb(0xe6e9ef))
@@ -64,8 +65,10 @@ fn sidebar() -> impl IntoElement {
 fn content() -> impl IntoElement {
   div()
     .id("content")
+    .w_0()
     .flex_1()
     .h_full()
+    .overflow_hidden()
     .p_6()
     .flex()
     .flex_col()
@@ -73,6 +76,7 @@ fn content() -> impl IntoElement {
     .child(
       div()
         .id("demo-card")
+        .w_full()
         .p_6()
         .flex()
         .flex_col()
@@ -90,6 +94,8 @@ fn content() -> impl IntoElement {
 fn task_list() -> impl IntoElement {
   div()
     .id("task-list")
+    .w_full()
+    .overflow_hidden()
     .flex()
     .flex_col()
     .gap_2()
@@ -117,8 +123,15 @@ fn task_list() -> impl IntoElement {
         .when(index + 1 < TASKS.len(), |row| {
           row.border_b_1().border_color(rgb(0x232833))
         })
-        .child(*label)
-        .child(div().text_sm().text_color(rgb(0x9299a8)).child(*status))
+        .child(div().w_0().flex_1().truncate().child(*label))
+        .child(
+          div()
+            .flex_shrink_0()
+            .pl_3()
+            .text_sm()
+            .text_color(rgb(0x9299a8))
+            .child(*status),
+        )
     }))
 }
 

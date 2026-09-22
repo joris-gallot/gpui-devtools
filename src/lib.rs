@@ -219,6 +219,7 @@ fn render_inspector(
     .size_full()
     .flex()
     .flex_col()
+    .occlude()
     .bg(rgb(config.background))
     .text_color(rgb(config.text))
     .border_l_1()
