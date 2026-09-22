@@ -157,6 +157,9 @@ fn render_inspector(
 ) -> Div {
   let active_element = inspector.active_element_id().cloned();
   let is_picking = inspector.is_picking();
+  if is_picking {
+    window.request_animation_frame();
+  }
   let inspector_states = inspector.render_inspector_states(window, cx);
   let content = div()
     .id("gpui-devtools-content")
