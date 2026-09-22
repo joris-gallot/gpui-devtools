@@ -356,8 +356,8 @@ fn render_div_state(state: &DivInspectorState, config: &Config) -> Div {
     .flex_col()
     .gap_3()
     .child(
-      section("Layout", config)
-        .child(render_geometry(state, config))
+      section("Box Model", config)
+        .child(render_box_model(state, &state.base_style, config))
         .child(property("Origin", state.bounds.origin.to_string(), config)),
     )
     .child(render_styles(&state.base_style, config))
@@ -465,6 +465,86 @@ struct StyleProperty {
   label: &'static str,
   value: String,
   swatch: Option<gpui::Fill>,
+}
+
+#[derive(Debug, PartialEq)]
+struct BoxModel {
+  element_size: String,
+  content_size: String,
+  content_size_compact: String,
+  margin: EdgeValues,
+  border: EdgeValues,
+  padding: EdgeValues,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct EdgeValues {
+  top: String,
+  right: String,
+  bottom: String,
+  left: String,
+}
+
+fn box_model(state: &DivInspectorState, style: &StyleRefinement) -> BoxModel {
+  BoxModel {
+    element_size: state.bounds.size.to_string(),
+    content_size: state.content_size.to_string(),
+    content_size_compact: compact_size(state.content_size),
+    margin: edge_values([
+      style.margin.top.as_ref(),
+      style.margin.right.as_ref(),
+      style.margin.bottom.as_ref(),
+      style.margin.left.as_ref(),
+    ]),
+    border: edge_values([
+      style.border_widths.top.as_ref(),
+      style.border_widths.right.as_ref(),
+      style.border_widths.bottom.as_ref(),
+      style.border_widths.left.as_ref(),
+    ]),
+    padding: edge_values([
+      style.padding.top.as_ref(),
+      style.padding.right.as_ref(),
+      style.padding.bottom.as_ref(),
+      style.padding.left.as_ref(),
+    ]),
+  }
+}
+
+fn compact_size(size: gpui::Size<gpui::Pixels>) -> String {
+  format!(
+    "{} x {}",
+    compact_pixels(size.width),
+    compact_pixels(size.height)
+  )
+}
+
+fn compact_pixels(pixels: gpui::Pixels) -> String {
+  let value = f32::from(pixels);
+  if (value.round() - value).abs() < 0.05 {
+    return format!("{}", value.round() as i32);
+  }
+
+  format!("{value:.1}")
+    .trim_end_matches('0')
+    .trim_end_matches('.')
+    .to_owned()
+}
+
+fn edge_values<T: std::fmt::Debug>(sides: [Option<&T>; 4]) -> EdgeValues {
+  let [top, right, bottom, left] = sides;
+  EdgeValues {
+    top: box_side_value(top),
+    right: box_side_value(right),
+    bottom: box_side_value(bottom),
+    left: box_side_value(left),
+  }
+}
+
+fn box_side_value<T: std::fmt::Debug>(value: Option<&T>) -> String {
+  value
+    .map(|value| format!("{value:?}"))
+    .unwrap_or_else(|| "0px".into())
 }
 
 fn style_groups(style: &StyleRefinement) -> Vec<StyleGroup> {
@@ -840,32 +920,96 @@ fn push_group(groups: &mut Vec<StyleGroup>, label: &'static str, properties: Vec
   }
 }
 
-fn render_geometry(state: &DivInspectorState, config: &Config) -> Div {
+fn render_box_model(
+  state: &DivInspectorState,
+  style: &StyleRefinement,
+  config: &Config,
+) -> impl IntoElement {
+  let model = box_model(state, style);
+  let content = render_content_box(model.content_size_compact, config);
+  let padding = render_box_layer(
+    "Padding",
+    &model.padding,
+    content.into_any_element(),
+    config,
+  );
+  let border = render_box_layer("Border", &model.border, padding.into_any_element(), config);
+  let margin = render_box_layer("Margin", &model.margin, border.into_any_element(), config);
+
   div()
+    .id("gpui-devtools-box-model")
+    .debug_selector(|| "gpui-devtools-box-model".into())
     .p_2()
     .rounded_md()
     .border_1()
     .border_color(rgb(config.accent))
     .bg(rgb(config.background))
-    .child(geometry_label(
-      "Element",
-      state.bounds.size.to_string(),
-      config,
-    ))
+    .child(geometry_label("Element", model.element_size, config))
+    .child(div().mt_2().child(margin))
+}
+
+fn render_content_box(value: String, config: &Config) -> Div {
+  div()
+    .px_1()
+    .py_1()
+    .overflow_hidden()
+    .rounded_sm()
+    .border_1()
+    .border_color(rgb(config.border))
+    .bg(rgb(config.panel_background))
     .child(
       div()
-        .mt_2()
-        .p_3()
-        .rounded_md()
-        .border_1()
-        .border_color(rgb(config.border))
-        .bg(rgb(config.panel_background))
-        .child(geometry_label(
-          "Content",
-          state.content_size.to_string(),
-          config,
-        )),
+        .truncate()
+        .text_center()
+        .text_xs()
+        .font_family("monospace")
+        .text_color(rgb(config.text))
+        .child(value),
     )
+}
+
+fn render_box_layer(
+  label: &'static str,
+  edges: &EdgeValues,
+  child: gpui::AnyElement,
+  config: &Config,
+) -> Div {
+  div()
+    .p_1()
+    .rounded_sm()
+    .border_1()
+    .border_color(rgb(config.border))
+    .bg(rgb(config.background))
+    .child(
+      div()
+        .mb_1()
+        .text_xs()
+        .text_color(rgb(config.muted_text))
+        .child(label),
+    )
+    .child(edge_value(edges.top.clone(), config))
+    .child(
+      div()
+        .my_1()
+        .flex()
+        .items_center()
+        .gap_1()
+        .overflow_hidden()
+        .child(edge_value(edges.left.clone(), config))
+        .child(div().w_0().flex_1().overflow_hidden().child(child))
+        .child(edge_value(edges.right.clone(), config)),
+    )
+    .child(edge_value(edges.bottom.clone(), config))
+}
+
+fn edge_value(value: String, config: &Config) -> Div {
+  div()
+    .min_w(gpui::px(28.0))
+    .text_center()
+    .text_xs()
+    .font_family("monospace")
+    .text_color(rgb(config.text))
+    .child(value)
 }
 
 fn geometry_label(label: &'static str, value: String, config: &Config) -> Div {
@@ -873,9 +1017,26 @@ fn geometry_label(label: &'static str, value: String, config: &Config) -> Div {
     .flex()
     .items_center()
     .justify_between()
+    .gap_2()
+    .overflow_hidden()
     .text_xs()
-    .child(div().text_color(rgb(config.muted_text)).child(label))
-    .child(div().font_family("monospace").child(value))
+    .child(
+      div()
+        .w_0()
+        .flex_1()
+        .truncate()
+        .text_color(rgb(config.muted_text))
+        .child(label),
+    )
+    .child(
+      div()
+        .w_0()
+        .flex_1()
+        .truncate()
+        .font_family("monospace")
+        .text_right()
+        .child(value),
+    )
 }
 
 fn section(title: &'static str, config: &Config) -> Div {
@@ -1157,6 +1318,62 @@ mod tests {
           swatch: None,
         }],
       }]
+    );
+  }
+
+  #[test]
+  fn box_model_includes_layout_metrics_and_spacing() {
+    let mut style = StyleRefinement::default();
+    style.margin.top = Some(gpui::px(1.0).into());
+    style.margin.right = Some(gpui::px(2.0).into());
+    style.padding.top = Some(gpui::px(3.0).into());
+    style.padding.right = Some(gpui::px(4.0).into());
+    style.padding.bottom = Some(gpui::px(5.0).into());
+    style.padding.left = Some(gpui::px(6.0).into());
+    style.border_widths.top = Some(gpui::px(7.0).into());
+
+    let state = DivInspectorState {
+      base_style: Box::new(style.clone()),
+      bounds: gpui::Bounds {
+        origin: gpui::point(gpui::px(10.0), gpui::px(20.0)),
+        size: gpui::size(gpui::px(100.0), gpui::px(50.0)),
+      },
+      content_size: gpui::size(gpui::px(80.0), gpui::px(30.0)),
+    };
+
+    assert_eq!(
+      box_model(&state, &style),
+      BoxModel {
+        element_size: gpui::size(gpui::px(100.0), gpui::px(50.0)).to_string(),
+        content_size: gpui::size(gpui::px(80.0), gpui::px(30.0)).to_string(),
+        content_size_compact: "80 x 30".into(),
+        margin: EdgeValues {
+          top: "1px".into(),
+          right: "2px".into(),
+          bottom: "0px".into(),
+          left: "0px".into(),
+        },
+        border: EdgeValues {
+          top: "7px".into(),
+          right: "0px".into(),
+          bottom: "0px".into(),
+          left: "0px".into(),
+        },
+        padding: EdgeValues {
+          top: "3px".into(),
+          right: "4px".into(),
+          bottom: "5px".into(),
+          left: "6px".into(),
+        },
+      }
+    );
+  }
+
+  #[test]
+  fn compact_sizes_omit_pixel_units() {
+    assert_eq!(
+      compact_size(gpui::size(gpui::px(80.0), gpui::px(30.5))),
+      "80 x 30.5"
     );
   }
 
