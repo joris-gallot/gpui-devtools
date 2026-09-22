@@ -402,9 +402,7 @@ fn render_style_group(group: StyleGroup, config: &Config) -> Div {
         .properties
         .into_iter()
         .enumerate()
-        .map(move |(index, property)| {
-          render_style_property(property, index + 1 < count, config)
-        })
+        .map(move |(index, property)| render_style_property(property, index + 1 < count, config))
     })
 }
 
