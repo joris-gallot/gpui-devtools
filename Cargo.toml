@@ -1,6 +1,6 @@
 [package]
 name = "gpui-devtools"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 description = "Developer tools for inspecting and debugging GPUI applications"
 license = "MIT"
