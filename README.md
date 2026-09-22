@@ -6,6 +6,8 @@
 
 Inspect and debug [GPUI](https://gpui.rs) applications with an element picker, layout information, source locations, and style details.
 
+![GPUI DevTools demo](https://raw.githubusercontent.com/joris-gallot/gpui-devtools/main/.github/assets/devtools.gif)
+
 The inspector includes:
 
 - an element picker
