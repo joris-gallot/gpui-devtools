@@ -17,11 +17,18 @@ The goal is to provide Chrome DevTools-like inspection and diagnostics for GPUI 
 
 ## Architecture
 
-- `src/lib.rs`: public API and inspector implementation.
+- `src/lib.rs`: public API, installation, inspector shell, and top-level rendering flow.
+- `src/box_model.rs`: box model data extraction and rendering.
+- `src/computed.rs`: computed/measured style panel.
+- `src/copy.rs`: clipboard helpers and copy feedback state.
+- `src/style_export.rs`: style summaries, override diffs, and Rust snippet exports.
+- `src/styles.rs`: explicit style grouping, formatting, and style panel rendering.
+- `src/temporary_edits.rs`: temporary style edit controls, state, and mutation logic.
+- `src/ui.rs`: shared UI helpers used by inspector panels.
 - `tests/inspector.rs`: GPUI interaction tests driven through the public API.
 - `examples/basic/`: minimal standalone application for visual testing.
 
-Keep the core crate independent from Zed UI and `gpui-component`.
+Keep the core crate independent from Zed UI and `gpui-kit`. The crate should stay framework-agnostic and avoid app-specific UI dependencies.
 
 ## Development
 
