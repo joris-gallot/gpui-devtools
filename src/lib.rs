@@ -964,6 +964,9 @@ fn style_rust_snippet(style: &StyleRefinement) -> String {
   push_sides_method(&mut lines, "m", &style.margin);
   push_sides_method(&mut lines, "border", &style.border_widths);
 
+  if let Some(border_color) = style.border_color {
+    lines.push(format!("  .border_color({})", rust_color(border_color)));
+  }
   if let Some(background) = style.background.as_ref() {
     lines.push(format!("  .bg({})", rust_fill(background)));
   }
@@ -992,17 +995,96 @@ fn push_sides_method<T: Clone + std::fmt::Debug + Default + PartialEq>(
   method: &'static str,
   sides: &gpui::EdgesRefinement<T>,
 ) {
-  let (Some(top), Some(right), Some(bottom), Some(left)) = (
-    sides.top.as_ref(),
-    sides.right.as_ref(),
-    sides.bottom.as_ref(),
-    sides.left.as_ref(),
-  ) else {
-    return;
-  };
+  let top = sides.top.as_ref();
+  let right = sides.right.as_ref();
+  let bottom = sides.bottom.as_ref();
+  let left = sides.left.as_ref();
 
-  if top == right && top == bottom && top == left {
+  if let (Some(top), Some(right), Some(bottom), Some(left)) = (top, right, bottom, left)
+    && top == right
+    && top == bottom
+    && top == left
+  {
     lines.push(format!("  .{method}({})", rust_debug_value(top)));
+    return;
+  }
+
+  let mut top_emitted = false;
+  let mut right_emitted = false;
+  let mut bottom_emitted = false;
+  let mut left_emitted = false;
+
+  if let (Some(top), Some(bottom)) = (top, bottom)
+    && top == bottom
+  {
+    lines.push(format!(
+      "  .{}({})",
+      side_method(method, SideMethod::Vertical),
+      rust_debug_value(top)
+    ));
+    top_emitted = true;
+    bottom_emitted = true;
+  }
+
+  if let (Some(left), Some(right)) = (left, right)
+    && left == right
+  {
+    lines.push(format!(
+      "  .{}({})",
+      side_method(method, SideMethod::Horizontal),
+      rust_debug_value(left)
+    ));
+    left_emitted = true;
+    right_emitted = true;
+  }
+
+  for (value, emitted, side) in [
+    (top, top_emitted, SideMethod::Top),
+    (right, right_emitted, SideMethod::Right),
+    (bottom, bottom_emitted, SideMethod::Bottom),
+    (left, left_emitted, SideMethod::Left),
+  ] {
+    if !emitted && let Some(value) = value {
+      lines.push(format!(
+        "  .{}({})",
+        side_method(method, side),
+        rust_debug_value(value)
+      ));
+    }
+  }
+}
+
+#[derive(Clone, Copy)]
+enum SideMethod {
+  Top,
+  Right,
+  Bottom,
+  Left,
+  Vertical,
+  Horizontal,
+}
+
+fn side_method(method: &'static str, side: SideMethod) -> &'static str {
+  match (method, side) {
+    ("p", SideMethod::Top) => "pt",
+    ("p", SideMethod::Right) => "pr",
+    ("p", SideMethod::Bottom) => "pb",
+    ("p", SideMethod::Left) => "pl",
+    ("p", SideMethod::Vertical) => "py",
+    ("p", SideMethod::Horizontal) => "px",
+    ("m", SideMethod::Top) => "mt",
+    ("m", SideMethod::Right) => "mr",
+    ("m", SideMethod::Bottom) => "mb",
+    ("m", SideMethod::Left) => "ml",
+    ("m", SideMethod::Vertical) => "my",
+    ("m", SideMethod::Horizontal) => "mx",
+    ("border", SideMethod::Top) => "border_t",
+    ("border", SideMethod::Right) => "border_r",
+    ("border", SideMethod::Bottom) => "border_b",
+    ("border", SideMethod::Left) => "border_l",
+    ("border", SideMethod::Vertical) => "border_y",
+    ("border", SideMethod::Horizontal) => "border_x",
+    _ => method,
   }
 }
 
@@ -2099,6 +2181,27 @@ mod tests {
     assert!(rust.contains(".w(px(140.0))"));
     assert!(rust.contains(".p(px(12.0))"));
     assert!(rust.contains(".bg(rgb(0x1f4f73))"));
+  }
+
+  #[test]
+  fn style_rust_snippet_includes_non_uniform_sides_and_border_color() {
+    let mut style = StyleRefinement::default();
+    style.padding.top = Some(gpui::px(4.0).into());
+    style.padding.right = Some(gpui::px(8.0).into());
+    style.margin.top = Some(gpui::px(2.0).into());
+    style.margin.bottom = Some(gpui::px(2.0).into());
+    style.border_widths.top = Some(gpui::px(1.0).into());
+    style.border_widths.left = Some(gpui::px(3.0).into());
+    style.border_widths.right = Some(gpui::px(3.0).into());
+    style.border_color = Some(rgb(0x61afef).into());
+
+    let rust = style_rust_snippet(&style);
+    assert!(rust.contains(".pt(px(4.0))"));
+    assert!(rust.contains(".pr(px(8.0))"));
+    assert!(rust.contains(".my(px(2.0))"));
+    assert!(rust.contains(".border_x(px(3.0))"));
+    assert!(rust.contains(".border_t(px(1.0))"));
+    assert!(rust.contains(".border_color(rgb(0x61afef))"));
   }
 
   #[test]
