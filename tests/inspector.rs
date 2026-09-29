@@ -120,6 +120,30 @@ fn picking_an_element_selects_it(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn temporary_style_edits_update_and_reset_the_selected_element(cx: &mut TestAppContext) {
+  cx.update(gpui_devtools::init);
+  let cx = open_fixture(cx);
+  open_inspector(cx);
+
+  click_selector(cx, "target");
+  let initial = cx
+    .debug_bounds("target")
+    .expect("target should be rendered");
+
+  click_selector(cx, "gpui-devtools-style-wider");
+  let widened = cx
+    .debug_bounds("target")
+    .expect("target should be rendered");
+  assert_eq!(widened.size.width, initial.size.width + px(40.0));
+
+  click_selector(cx, "gpui-devtools-style-reset");
+  let reset = cx
+    .debug_bounds("target")
+    .expect("target should be rendered");
+  assert_eq!(reset.size.width, initial.size.width);
+}
+
+#[gpui::test]
 fn copy_source_writes_the_selected_element_location(cx: &mut TestAppContext) {
   cx.update(gpui_devtools::init);
   let cx = open_fixture(cx);

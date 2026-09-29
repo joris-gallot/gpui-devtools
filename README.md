@@ -13,6 +13,7 @@ The inspector includes:
 - an element picker
 - source locations and GPUI element IDs with copy actions
 - a box model view with element bounds, content size, margin, border, and padding
+- temporary quick style edits for the selected `Div`, including width, padding, background, visibility, and reset
 - grouped `Div` style refinements with compact spacing and color previews
 - a global toggle action and optional default keybinding
 
@@ -59,7 +60,7 @@ gpui_devtools::init_with(
 
 ## Roadmap
 
-- computed style view and temporary style editing
+- computed style view and richer style editing controls
 - render, layout and paint profiler
 - repaint highlighting
 - focus and keybinding inspector

@@ -1,7 +1,7 @@
 //! Developer tools for inspecting and debugging [GPUI](https://gpui.rs) applications.
 //!
 //! The inspector renders next to the application window and shows the picked element's source
-//! location, GPUI element ID, bounds, content size and `Div` style refinements.
+//! location, GPUI element ID, bounds, content size, temporary edits and `Div` style refinements.
 //!
 //! Install it once the rest of the application is initialized, after any library that registers
 //! its own inspector renderer:
@@ -120,11 +120,14 @@ pub fn init_with(config: Config, cx: &mut App) {
 
   cx.on_action(|_: &ToggleInspector, cx| toggle_active_window(cx));
 
+  let style_edits = Rc::new(RefCell::new(StyleEditState::default()));
   let div_config = config.clone();
+  let div_style_edits = Rc::clone(&style_edits);
   cx.register_inspector_element(move |_window, _cx| {
     let div_config = div_config.clone();
-    move |_id, state: &DivInspectorState, _window: &mut Window, _cx: &mut App| {
-      render_div_state(state, &div_config)
+    let div_style_edits = Rc::clone(&div_style_edits);
+    move |id, state: &DivInspectorState, _window: &mut Window, _cx: &mut App| {
+      render_div_state(id, state, &div_style_edits, &div_config)
     }
   });
 
@@ -354,7 +357,16 @@ fn render_element_id(
     )
 }
 
-fn render_div_state(state: &DivInspectorState, config: &Config) -> Div {
+fn render_div_state(
+  id: InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  style_edits
+    .borrow_mut()
+    .select(id.clone(), &state.base_style);
+
   div()
     .flex()
     .flex_col()
@@ -364,7 +376,199 @@ fn render_div_state(state: &DivInspectorState, config: &Config) -> Div {
         .child(render_box_model(state, &state.base_style, config))
         .child(property("Origin", state.bounds.origin.to_string(), config)),
     )
+    .child(render_style_edits(id, state, style_edits, config))
     .child(render_styles(&state.base_style, config))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StyleEdit {
+  Wider,
+  Narrower,
+  Padding,
+  AccentBackground,
+  Hide,
+  Reset,
+}
+
+#[derive(Debug, Default)]
+struct StyleEditState {
+  selected: Option<InspectorElementId>,
+  original_style: Option<StyleRefinement>,
+}
+
+impl StyleEditState {
+  fn select(&mut self, id: InspectorElementId, style: &StyleRefinement) {
+    if self.selected.as_ref() == Some(&id) {
+      return;
+    }
+
+    self.selected = Some(id);
+    self.original_style = Some(style.clone());
+  }
+
+  fn original_for(&self, id: &InspectorElementId) -> Option<StyleRefinement> {
+    (self.selected.as_ref() == Some(id))
+      .then(|| self.original_style.clone())
+      .flatten()
+  }
+
+  fn is_dirty(&self, id: &InspectorElementId, style: &StyleRefinement) -> bool {
+    self
+      .original_for(id)
+      .is_some_and(|original| original != *style)
+  }
+}
+
+fn render_style_edits(
+  id: InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  let is_dirty = style_edits.borrow().is_dirty(&id, &state.base_style);
+  let status = if is_dirty {
+    "Temporary overrides active. Reset restores the picked style."
+  } else {
+    "Try quick overrides without changing application code."
+  };
+
+  section("Temporary edits", config)
+    .child(
+      div()
+        .text_xs()
+        .text_color(rgb(config.muted_text))
+        .child(status),
+    )
+    .child(
+      div()
+        .flex()
+        .flex_wrap()
+        .gap_2()
+        .child(style_edit_button(
+          "gpui-devtools-style-wider",
+          "Wider",
+          StyleEdit::Wider,
+          id.clone(),
+          Rc::clone(style_edits),
+          config,
+        ))
+        .child(style_edit_button(
+          "gpui-devtools-style-narrower",
+          "Narrower",
+          StyleEdit::Narrower,
+          id.clone(),
+          Rc::clone(style_edits),
+          config,
+        ))
+        .child(style_edit_button(
+          "gpui-devtools-style-padding",
+          "Padding 12",
+          StyleEdit::Padding,
+          id.clone(),
+          Rc::clone(style_edits),
+          config,
+        ))
+        .child(style_edit_button(
+          "gpui-devtools-style-bg",
+          "Accent bg",
+          StyleEdit::AccentBackground,
+          id.clone(),
+          Rc::clone(style_edits),
+          config,
+        ))
+        .child(style_edit_button(
+          "gpui-devtools-style-hide",
+          "Hide",
+          StyleEdit::Hide,
+          id.clone(),
+          Rc::clone(style_edits),
+          config,
+        ))
+        .child(style_edit_button(
+          "gpui-devtools-style-reset",
+          "Reset",
+          StyleEdit::Reset,
+          id,
+          Rc::clone(style_edits),
+          config,
+        )),
+    )
+}
+
+fn style_edit_button(
+  selector: &'static str,
+  label: &'static str,
+  edit: StyleEdit,
+  id: InspectorElementId,
+  style_edits: Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> impl IntoElement {
+  div()
+    .id(selector)
+    .debug_selector(|| selector.into())
+    .px_2()
+    .py_1()
+    .rounded_sm()
+    .cursor_pointer()
+    .border_1()
+    .border_color(rgb(config.border))
+    .bg(rgb(config.background))
+    .text_xs()
+    .text_color(if edit == StyleEdit::Reset {
+      rgb(config.muted_text)
+    } else {
+      rgb(config.text)
+    })
+    .hover(|button| button.border_color(rgb(config.accent)))
+    .child(label)
+    .on_click(move |_, window, cx| {
+      let original_style = style_edits.borrow().original_for(&id);
+      let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
+        let Some(state) = state else {
+          return;
+        };
+
+        if edit == StyleEdit::Reset {
+          if let Some(original_style) = original_style {
+            *state.base_style = original_style;
+          }
+        } else {
+          let current_size = state.bounds.size;
+          apply_style_edit(&mut state.base_style, edit, current_size);
+        }
+      });
+      window.refresh();
+    })
+}
+
+fn apply_style_edit(
+  style: &mut StyleRefinement,
+  edit: StyleEdit,
+  current_size: gpui::Size<gpui::Pixels>,
+) {
+  match edit {
+    StyleEdit::Wider => {
+      style.size.width = Some(gpui::px(f32::from(current_size.width) + 40.0).into());
+    }
+    StyleEdit::Narrower => {
+      let width = (f32::from(current_size.width) - 40.0).max(1.0);
+      style.size.width = Some(gpui::px(width).into());
+    }
+    StyleEdit::Padding => {
+      let padding = gpui::px(12.0).into();
+      style.padding.top = Some(padding);
+      style.padding.right = Some(padding);
+      style.padding.bottom = Some(padding);
+      style.padding.left = Some(padding);
+    }
+    StyleEdit::AccentBackground => {
+      style.background = Some(rgb(0x1f4f73).into());
+    }
+    StyleEdit::Hide => {
+      style.visibility = Some(gpui::Visibility::Hidden);
+    }
+    StyleEdit::Reset => {}
+  }
 }
 
 fn render_styles(style: &StyleRefinement, config: &Config) -> Div {
@@ -1371,6 +1575,22 @@ mod tests {
         },
       }
     );
+  }
+
+  #[test]
+  fn temporary_style_edits_change_refinements() {
+    let mut style = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+
+    apply_style_edit(&mut style, StyleEdit::Wider, current_size);
+    assert_eq!(style.size.width, Some(gpui::px(140.0).into()));
+
+    apply_style_edit(&mut style, StyleEdit::Padding, current_size);
+    assert_eq!(style.padding.top, Some(gpui::px(12.0).into()));
+    assert_eq!(style.padding.right, Some(gpui::px(12.0).into()));
+
+    apply_style_edit(&mut style, StyleEdit::Hide, current_size);
+    assert_eq!(style.visibility, Some(gpui::Visibility::Hidden));
   }
 
   #[test]
