@@ -456,7 +456,8 @@ fn render_style_edits(
     )
     .child(render_edit_snapshot(state, config))
     .child(render_active_overrides(&id, state, style_edits, config))
-    .child(render_edit_button_row(
+    .child(render_edit_group(
+      "Layout",
       &[
         ("gpui-devtools-style-wider", "Wider", StyleEdit::Wider),
         (
@@ -472,7 +473,8 @@ fn render_style_edits(
       style_edits,
       config,
     ))
-    .child(render_edit_button_row(
+    .child(render_edit_group(
+      "Spacing",
       &[
         (
           "gpui-devtools-style-padding",
@@ -481,19 +483,20 @@ fn render_style_edits(
         ),
         ("gpui-devtools-style-margin", "Margin 8", StyleEdit::Margin),
         ("gpui-devtools-style-border", "Border 2", StyleEdit::Border),
-        (
-          "gpui-devtools-style-opacity",
-          "Opacity 50%",
-          StyleEdit::HalfOpacity,
-        ),
       ],
       &id,
       state,
       style_edits,
       config,
     ))
-    .child(render_edit_button_row(
+    .child(render_edit_group(
+      "Appearance",
       &[
+        (
+          "gpui-devtools-style-opacity",
+          "Opacity 50%",
+          StyleEdit::HalfOpacity,
+        ),
         (
           "gpui-devtools-style-bg",
           "Accent bg",
@@ -507,24 +510,7 @@ fn render_style_edits(
       style_edits,
       config,
     ))
-    .child(
-      div()
-        .flex()
-        .flex_wrap()
-        .gap_2()
-        .child(style_copy_button(
-          "gpui-devtools-copy-style-summary",
-          "Copy summary",
-          style_summary(&state.base_style),
-          config,
-        ))
-        .child(style_copy_button(
-          "gpui-devtools-copy-style-rust",
-          "Copy Rust",
-          style_rust_snippet(&state.base_style),
-          config,
-        )),
-    )
+    .child(render_export_group(state, config))
 }
 
 fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
@@ -614,6 +600,66 @@ fn remove_style_edit_button(
     });
     window.refresh();
   })
+}
+
+fn render_edit_group(
+  title: &'static str,
+  actions: &[(&'static str, &'static str, StyleEdit)],
+  id: &InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  div()
+    .flex()
+    .flex_col()
+    .gap_1()
+    .child(
+      div()
+        .text_xs()
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(rgb(config.accent))
+        .child(title),
+    )
+    .child(render_edit_button_row(
+      actions,
+      id,
+      state,
+      style_edits,
+      config,
+    ))
+}
+
+fn render_export_group(state: &DivInspectorState, config: &Config) -> Div {
+  div()
+    .flex()
+    .flex_col()
+    .gap_1()
+    .child(
+      div()
+        .text_xs()
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(rgb(config.accent))
+        .child("Export"),
+    )
+    .child(
+      div()
+        .flex()
+        .flex_wrap()
+        .gap_2()
+        .child(style_copy_button(
+          "gpui-devtools-copy-style-summary",
+          "Copy summary",
+          style_summary(&state.base_style),
+          config,
+        ))
+        .child(style_copy_button(
+          "gpui-devtools-copy-style-rust",
+          "Copy Rust",
+          style_rust_snippet(&state.base_style),
+          config,
+        )),
+    )
 }
 
 fn render_edit_button_row(
