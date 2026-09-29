@@ -21,16 +21,15 @@
 
 #![warn(missing_docs)]
 
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use gpui::{
-  App, ClipboardItem, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement,
-  KeyBinding, Window, actions, div, img, prelude::*, rgb,
+  App, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement, KeyBinding,
+  Window, actions, div, img, prelude::*, rgb,
 };
 
 const DEFAULT_MACOS_KEY_BINDING: &str = "cmd-alt-i";
 const DEFAULT_OTHER_KEY_BINDING: &str = "ctrl-alt-i";
-const COPY_FEEDBACK_DURATION: Duration = Duration::from_millis(1500);
 const PICK_ICON_SVG: &[u8] = include_bytes!("../assets/icons/square-dashed-mouse-pointer.svg");
 const CLOSE_ICON_SVG: &[u8] = include_bytes!("../assets/icons/x.svg");
 
@@ -381,9 +380,11 @@ fn render_div_state(
 }
 
 mod box_model;
+mod copy;
 mod styles;
 mod temporary_edits;
 use box_model::render_box_model;
+use copy::{CopyFeedback, CopyTarget, CopyableProperty, copyable_property};
 use styles::render_styles;
 use temporary_edits::{StyleEditState, render_style_edits};
 
@@ -431,109 +432,7 @@ fn property(label: &'static str, value: String, config: &Config) -> Div {
   property_with_action(label, value, None, config)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CopyTarget {
-  Source,
-  GlobalId,
-}
-
-#[derive(Debug, Default)]
-struct CopyFeedback {
-  copied: Option<(CopyTarget, String)>,
-  generation: u64,
-}
-
-impl CopyFeedback {
-  fn is_copied(&self, target: CopyTarget, value: &str) -> bool {
-    self
-      .copied
-      .as_ref()
-      .is_some_and(|copied| copied.0 == target && copied.1 == value)
-  }
-
-  fn mark_copied(&mut self, target: CopyTarget, value: String) -> u64 {
-    self.generation = self.generation.wrapping_add(1);
-    self.copied = Some((target, value));
-    self.generation
-  }
-
-  fn clear(&mut self, generation: u64) -> bool {
-    if self.generation != generation {
-      return false;
-    }
-
-    self.copied = None;
-    true
-  }
-}
-
-struct CopyableProperty {
-  id: &'static str,
-  label: &'static str,
-  display_value: String,
-  copy_value: String,
-  target: CopyTarget,
-}
-
-fn copyable_property(
-  property: CopyableProperty,
-  cx: &mut Context<Inspector>,
-  copy_feedback: &Rc<RefCell<CopyFeedback>>,
-  config: &Config,
-) -> Div {
-  let CopyableProperty {
-    id,
-    label,
-    display_value,
-    copy_value,
-    target,
-  } = property;
-  let is_copied = copy_feedback.borrow().is_copied(target, &copy_value);
-  let copy_feedback = Rc::clone(copy_feedback);
-  let action = div()
-    .id(id)
-    .debug_selector(|| id.into())
-    .w(gpui::px(56.0))
-    .px_1()
-    .rounded_sm()
-    .cursor_pointer()
-    .text_center()
-    .text_xs()
-    .whitespace_nowrap()
-    .text_color(rgb(config.accent))
-    .hover(|button| button.bg(rgb(config.background)))
-    .child(if is_copied { "Copied!" } else { "Copy" })
-    .on_click(cx.listener(move |_inspector, _, window, cx| {
-      cx.write_to_clipboard(text_clipboard_item(copy_value.clone()));
-      let generation = copy_feedback
-        .borrow_mut()
-        .mark_copied(target, copy_value.clone());
-      window.refresh();
-
-      let copy_feedback = Rc::clone(&copy_feedback);
-      cx.spawn(async move |inspector, cx| {
-        cx.background_executor().timer(COPY_FEEDBACK_DURATION).await;
-        let cleared = copy_feedback.borrow_mut().clear(generation);
-        if cleared {
-          let _ = inspector.update(cx, |_, cx| cx.notify());
-        }
-      })
-      .detach();
-    }));
-
-  property_with_action(
-    label,
-    display_value,
-    Some(action.into_any_element()),
-    config,
-  )
-}
-
-fn text_clipboard_item(value: String) -> ClipboardItem {
-  ClipboardItem::new_string(value)
-}
-
-fn property_with_action(
+pub(crate) fn property_with_action(
   label: &'static str,
   value: String,
   action: Option<gpui::AnyElement>,
@@ -620,6 +519,7 @@ const fn default_key_binding() -> &'static str {
 mod tests {
   use super::*;
   use crate::box_model::{BoxModel, EdgeValues, box_model, compact_size};
+  use crate::copy::{CopyFeedback, CopyTarget, text_clipboard_item};
   use crate::styles::{
     StyleGroup, StyleProperty, format_color, format_fill, push_compact_sides, push_font_fallbacks,
     push_font_features, push_shadows, push_strikethrough, push_text, push_text_overflow,

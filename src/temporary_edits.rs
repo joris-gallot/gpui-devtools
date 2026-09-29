@@ -7,9 +7,9 @@ use gpui::{
 use crate::{
   Config,
   box_model::{compact_pixels, compact_size},
+  copy::text_clipboard_item,
   geometry_label, section,
   styles::{format_color, format_fill, style_groups},
-  text_clipboard_item,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
