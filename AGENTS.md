@@ -43,6 +43,25 @@ cargo check --workspace
 cargo package --allow-dirty --no-verify
 ```
 
+For release prep, also run:
+
+```sh
+cargo clippy --workspace --all-targets -- -D warnings
+cargo publish --dry-run --allow-dirty
+```
+
+## Releases
+
+- Before creating or editing a GitHub release, inspect recent releases with `gh release list` and `gh release view` and match the existing format.
+- Release notes should usually use:
+  - `## What's new`
+  - `## Fixes` when applicable
+  - `## Breaking changes` when applicable
+  - `## Improvements` when applicable
+  - a final compatibility sentence like `` `gpui-devtools` 0.5 targets `gpui-pre` 0.3. ``
+- Do not include validation command output in release notes unless prior releases already do.
+- For version releases, update `Cargo.toml`, `Cargo.lock`, and `README.md` install/compatibility docs before publishing.
+
 ## Code style
 
 - Prefer small, typed public APIs.
