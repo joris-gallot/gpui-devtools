@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/gpui-devtools.svg)](https://crates.io/crates/gpui-devtools)
 [![License](https://img.shields.io/crates/l/gpui-devtools.svg)](LICENSE)
 
-Inspect and debug [GPUI](https://gpui.rs) applications with an element picker, layout information, source locations, and style details.
+Inspect and debug [GPUI](https://gpui.rs) applications with an element picker, layout information, source locations, computed values, and style details.
 
 ![GPUI DevTools demo](https://raw.githubusercontent.com/joris-gallot/gpui-devtools/main/.github/assets/devtools.gif)
 
@@ -13,7 +13,8 @@ The inspector includes:
 - an element picker
 - source locations and GPUI element IDs with copy actions
 - a box model view with element bounds, content size, margin, border, and padding
-- temporary quick style edits for the selected `Div`, including size, spacing, border, opacity, background, visibility, reset, and copy/export actions
+- a computed values panel with measured bounds, content size, explicit dimensions, spacing, opacity, visibility, and background
+- temporary quick style edits for the selected `Div`, including presets, incremental size/spacing/opacity controls, background, visibility, reset, and copy/export actions
 - grouped `Div` style refinements with compact spacing and color previews
 - a global toggle action and optional default keybinding
 
@@ -25,13 +26,14 @@ devtools = ["dep:gpui-devtools", "gpui/inspector"]
 
 [dependencies]
 gpui = { package = "gpui-pre", version = "0.3" }
-gpui-devtools = { version = "0.4", optional = true }
+gpui-devtools = { version = "0.5", optional = true }
 ```
 
-GPUI DevTools 0.4 targets [`gpui-pre`](https://crates.io/crates/gpui-pre) 0.3, the crates.io snapshot of Zed's GPUI also used by [gpui-kit](https://github.com/longbridge/gpui-kit). Your application must resolve to the same GPUI crate, otherwise Cargo builds two incompatible copies.
+GPUI DevTools 0.5 targets [`gpui-pre`](https://crates.io/crates/gpui-pre) 0.3, the crates.io snapshot of Zed's GPUI also used by [gpui-kit](https://github.com/longbridge/gpui-kit). Your application must resolve to the same GPUI crate, otherwise Cargo builds two incompatible copies.
 
 | gpui-devtools | GPUI |
 | --- | --- |
+| 0.5 | `gpui-pre` 0.3 |
 | 0.4 | `gpui-pre` 0.3 |
 | 0.3 | `gpui-pre` 0.3 |
 | 0.2 | `gpui` 0.2 |
@@ -60,7 +62,6 @@ gpui_devtools::init_with(
 
 ## Roadmap
 
-- computed style view and richer style editing controls
 - render, layout and paint profiler
 - repaint highlighting
 - focus and keybinding inspector
