@@ -362,16 +362,19 @@ fn render_div_state(
         .child(property("Origin", state.bounds.origin.to_string(), config)),
     )
     .child(render_style_edits(id, state, style_edits, config))
+    .child(render_computed(state, &state.base_style, config))
     .child(render_styles(&state.base_style, config))
 }
 
 mod box_model;
+mod computed;
 mod copy;
 mod style_export;
 mod styles;
 mod temporary_edits;
 mod ui;
 use box_model::render_box_model;
+use computed::render_computed;
 use copy::{CopyFeedback, CopyTarget, CopyableProperty, copyable_property};
 use styles::render_styles;
 use temporary_edits::{StyleEditState, render_style_edits};
@@ -433,6 +436,7 @@ const fn default_key_binding() -> &'static str {
 mod tests {
   use super::*;
   use crate::box_model::{BoxModel, EdgeValues, box_model, compact_size};
+  use crate::computed::{ComputedStyle, computed_style};
   use crate::copy::{CopyFeedback, CopyTarget, text_clipboard_item};
   use crate::style_export::{
     style_edit_diff, style_edit_diff_label, style_rust_snippet, style_summary,
@@ -570,6 +574,46 @@ mod tests {
           bottom: "5px".into(),
           left: "6px".into(),
         },
+      }
+    );
+  }
+
+  #[test]
+  fn computed_style_includes_measured_and_explicit_values() {
+    let mut style = StyleRefinement::default();
+    style.size.width = Some(gpui::px(120.0).into());
+    style.padding.top = Some(gpui::px(3.0).into());
+    style.padding.right = Some(gpui::px(4.0).into());
+    style.padding.bottom = Some(gpui::px(3.0).into());
+    style.padding.left = Some(gpui::px(4.0).into());
+    style.border_widths.top = Some(gpui::px(1.0).into());
+    style.opacity = Some(0.75);
+    style.visibility = Some(gpui::Visibility::Hidden);
+    style.background = Some(rgb(0x1f4f73).into());
+
+    let state = DivInspectorState {
+      base_style: Box::new(style.clone()),
+      bounds: gpui::Bounds {
+        origin: gpui::point(gpui::px(10.0), gpui::px(20.0)),
+        size: gpui::size(gpui::px(100.0), gpui::px(50.0)),
+      },
+      content_size: gpui::size(gpui::px(80.0), gpui::px(30.0)),
+    };
+
+    assert_eq!(
+      computed_style(&state, &style),
+      ComputedStyle {
+        bounds_size: "100 x 50".into(),
+        content_size: "80 x 30".into(),
+        origin: state.bounds.origin.to_string(),
+        explicit_width: "120px".into(),
+        explicit_height: "auto".into(),
+        padding: "3px 4px".into(),
+        margin: "auto".into(),
+        border: "1px auto auto auto".into(),
+        opacity: "0.75".into(),
+        visibility: "Hidden".into(),
+        background: "#1f4f73".into(),
       }
     );
   }
