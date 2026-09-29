@@ -144,6 +144,30 @@ fn temporary_style_edits_update_and_reset_the_selected_element(cx: &mut TestAppC
 }
 
 #[gpui::test]
+fn temporary_style_edits_toggle_their_override(cx: &mut TestAppContext) {
+  cx.update(gpui_devtools::init);
+  let cx = open_fixture(cx);
+  open_inspector(cx);
+
+  click_selector(cx, "target");
+  click_selector(cx, "gpui-devtools-style-hide");
+  click_selector(cx, "gpui-devtools-copy-style-summary");
+  let copied = cx
+    .read_from_clipboard()
+    .and_then(|item| item.text())
+    .expect("style summary should be copied");
+  assert!(copied.contains("Visibility: Hidden"));
+
+  click_selector(cx, "gpui-devtools-style-hide");
+  click_selector(cx, "gpui-devtools-copy-style-summary");
+  let copied = cx
+    .read_from_clipboard()
+    .and_then(|item| item.text())
+    .expect("style summary should be copied");
+  assert!(!copied.contains("Visibility: Hidden"));
+}
+
+#[gpui::test]
 fn style_export_buttons_copy_the_selected_element_styles(cx: &mut TestAppContext) {
   cx.update(gpui_devtools::init);
   let cx = open_fixture(cx);

@@ -365,7 +365,7 @@ fn render_div_state(
 ) -> Div {
   style_edits
     .borrow_mut()
-    .select(id.clone(), &state.base_style);
+    .select(id.clone(), &state.base_style, state.bounds.size);
 
   div()
     .flex()
@@ -399,28 +399,38 @@ enum StyleEdit {
 struct StyleEditState {
   selected: Option<InspectorElementId>,
   original_style: Option<StyleRefinement>,
+  original_size: Option<gpui::Size<gpui::Pixels>>,
 }
 
 impl StyleEditState {
-  fn select(&mut self, id: InspectorElementId, style: &StyleRefinement) {
+  fn select(
+    &mut self,
+    id: InspectorElementId,
+    style: &StyleRefinement,
+    size: gpui::Size<gpui::Pixels>,
+  ) {
     if self.selected.as_ref() == Some(&id) {
       return;
     }
 
     self.selected = Some(id);
     self.original_style = Some(style.clone());
+    self.original_size = Some(size);
   }
 
-  fn original_for(&self, id: &InspectorElementId) -> Option<StyleRefinement> {
+  fn original_for(
+    &self,
+    id: &InspectorElementId,
+  ) -> Option<(StyleRefinement, gpui::Size<gpui::Pixels>)> {
     (self.selected.as_ref() == Some(id))
-      .then(|| self.original_style.clone())
+      .then(|| self.original_style.clone().zip(self.original_size))
       .flatten()
   }
 
   fn is_dirty(&self, id: &InspectorElementId, style: &StyleRefinement) -> bool {
     self
       .original_for(id)
-      .is_some_and(|original| original != *style)
+      .is_some_and(|(original, _)| original != *style)
   }
 }
 
@@ -457,6 +467,7 @@ fn render_style_edits(
         ("gpui-devtools-style-shorter", "Shorter", StyleEdit::Shorter),
       ],
       &id,
+      state,
       style_edits,
       config,
     ))
@@ -476,6 +487,7 @@ fn render_style_edits(
         ),
       ],
       &id,
+      state,
       style_edits,
       config,
     ))
@@ -490,6 +502,7 @@ fn render_style_edits(
         ("gpui-devtools-style-reset", "Reset", StyleEdit::Reset),
       ],
       &id,
+      state,
       style_edits,
       config,
     ))
@@ -543,9 +556,16 @@ fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
 fn render_edit_button_row(
   actions: &[(&'static str, &'static str, StyleEdit)],
   id: &InspectorElementId,
+  state: &DivInspectorState,
   style_edits: &Rc<RefCell<StyleEditState>>,
   config: &Config,
 ) -> Div {
+  let original_size = style_edits
+    .borrow()
+    .original_for(id)
+    .map(|(_, size)| size)
+    .unwrap_or(state.bounds.size);
+
   div()
     .flex()
     .flex_wrap()
@@ -557,6 +577,7 @@ fn render_edit_button_row(
         *edit,
         id.clone(),
         Rc::clone(style_edits),
+        is_style_edit_active(&state.base_style, *edit, original_size),
         config,
       )
     }))
@@ -568,23 +589,26 @@ fn style_edit_button(
   edit: StyleEdit,
   id: InspectorElementId,
   style_edits: Rc<RefCell<StyleEditState>>,
+  active: bool,
   config: &Config,
 ) -> impl IntoElement {
-  inspector_button(selector, label, edit == StyleEdit::Reset, config).on_click(
+  inspector_button(selector, label, edit == StyleEdit::Reset, active, config).on_click(
     move |_, window, cx| {
-      let original_style = style_edits.borrow().original_for(&id);
+      let original = style_edits.borrow().original_for(&id);
       let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
         let Some(state) = state else {
           return;
         };
+        let Some((original_style, original_size)) = original else {
+          return;
+        };
 
         if edit == StyleEdit::Reset {
-          if let Some(original_style) = original_style {
-            *state.base_style = original_style;
-          }
+          *state.base_style = original_style;
+        } else if is_style_edit_active(&state.base_style, edit, original_size) {
+          restore_style_edit(&mut state.base_style, edit, &original_style);
         } else {
-          let current_size = state.bounds.size;
-          apply_style_edit(&mut state.base_style, edit, current_size);
+          apply_style_edit(&mut state.base_style, edit, original_size);
         }
       });
       window.refresh();
@@ -598,7 +622,7 @@ fn style_copy_button(
   value: String,
   config: &Config,
 ) -> impl IntoElement {
-  inspector_button(selector, label, false, config).on_click(move |_, _window, cx| {
+  inspector_button(selector, label, false, false, config).on_click(move |_, _window, cx| {
     cx.write_to_clipboard(text_clipboard_item(value.clone()));
   })
 }
@@ -607,6 +631,7 @@ fn inspector_button(
   selector: &'static str,
   label: &'static str,
   muted: bool,
+  active: bool,
   config: &Config,
 ) -> gpui::Stateful<Div> {
   div()
@@ -617,8 +642,16 @@ fn inspector_button(
     .rounded_sm()
     .cursor_pointer()
     .border_1()
-    .border_color(rgb(config.border))
-    .bg(rgb(config.background))
+    .border_color(if active {
+      rgb(config.accent)
+    } else {
+      rgb(config.border)
+    })
+    .bg(if active {
+      rgb(config.accent)
+    } else {
+      rgb(config.background)
+    })
     .text_xs()
     .text_color(if muted {
       rgb(config.muted_text)
@@ -632,56 +665,154 @@ fn inspector_button(
 fn apply_style_edit(
   style: &mut StyleRefinement,
   edit: StyleEdit,
-  current_size: gpui::Size<gpui::Pixels>,
+  original_size: gpui::Size<gpui::Pixels>,
 ) {
   match edit {
     StyleEdit::Wider => {
-      style.size.width = Some(gpui::px(f32::from(current_size.width) + 40.0).into());
+      style.size.width = wide_width(original_size);
     }
     StyleEdit::Narrower => {
-      let width = (f32::from(current_size.width) - 40.0).max(1.0);
-      style.size.width = Some(gpui::px(width).into());
+      style.size.width = narrow_width(original_size);
     }
     StyleEdit::Taller => {
-      style.size.height = Some(gpui::px(f32::from(current_size.height) + 40.0).into());
+      style.size.height = tall_height(original_size);
     }
     StyleEdit::Shorter => {
-      let height = (f32::from(current_size.height) - 40.0).max(1.0);
-      style.size.height = Some(gpui::px(height).into());
+      style.size.height = short_height(original_size);
     }
     StyleEdit::Padding => {
-      let padding = gpui::px(12.0).into();
+      let padding = edit_padding();
       style.padding.top = Some(padding);
       style.padding.right = Some(padding);
       style.padding.bottom = Some(padding);
       style.padding.left = Some(padding);
     }
     StyleEdit::Margin => {
-      let margin = gpui::px(8.0).into();
+      let margin = edit_margin();
       style.margin.top = Some(margin);
       style.margin.right = Some(margin);
       style.margin.bottom = Some(margin);
       style.margin.left = Some(margin);
     }
     StyleEdit::Border => {
-      let border = gpui::px(2.0).into();
+      let border = edit_border();
       style.border_widths.top = Some(border);
       style.border_widths.right = Some(border);
       style.border_widths.bottom = Some(border);
       style.border_widths.left = Some(border);
-      style.border_color = Some(rgb(0x61afef).into());
+      style.border_color = Some(edit_border_color());
     }
     StyleEdit::HalfOpacity => {
       style.opacity = Some(0.5);
     }
     StyleEdit::AccentBackground => {
-      style.background = Some(rgb(0x1f4f73).into());
+      style.background = Some(edit_background());
     }
     StyleEdit::Hide => {
       style.visibility = Some(gpui::Visibility::Hidden);
     }
     StyleEdit::Reset => {}
   }
+}
+
+fn restore_style_edit(style: &mut StyleRefinement, edit: StyleEdit, original: &StyleRefinement) {
+  match edit {
+    StyleEdit::Wider | StyleEdit::Narrower => {
+      style.size.width = original.size.width.clone();
+    }
+    StyleEdit::Taller | StyleEdit::Shorter => {
+      style.size.height = original.size.height.clone();
+    }
+    StyleEdit::Padding => {
+      style.padding = original.padding.clone();
+    }
+    StyleEdit::Margin => {
+      style.margin = original.margin.clone();
+    }
+    StyleEdit::Border => {
+      style.border_widths = original.border_widths.clone();
+      style.border_color = original.border_color;
+    }
+    StyleEdit::HalfOpacity => {
+      style.opacity = original.opacity;
+    }
+    StyleEdit::AccentBackground => {
+      style.background = original.background.clone();
+    }
+    StyleEdit::Hide => {
+      style.visibility = original.visibility;
+    }
+    StyleEdit::Reset => {}
+  }
+}
+
+fn is_style_edit_active(
+  style: &StyleRefinement,
+  edit: StyleEdit,
+  original_size: gpui::Size<gpui::Pixels>,
+) -> bool {
+  match edit {
+    StyleEdit::Wider => style.size.width == wide_width(original_size),
+    StyleEdit::Narrower => style.size.width == narrow_width(original_size),
+    StyleEdit::Taller => style.size.height == tall_height(original_size),
+    StyleEdit::Shorter => style.size.height == short_height(original_size),
+    StyleEdit::Padding => sides_equal(&style.padding, edit_padding()),
+    StyleEdit::Margin => sides_equal(&style.margin, edit_margin()),
+    StyleEdit::Border => {
+      sides_equal(&style.border_widths, edit_border())
+        && style.border_color == Some(edit_border_color())
+    }
+    StyleEdit::HalfOpacity => style.opacity == Some(0.5),
+    StyleEdit::AccentBackground => style.background == Some(edit_background()),
+    StyleEdit::Hide => style.visibility == Some(gpui::Visibility::Hidden),
+    StyleEdit::Reset => false,
+  }
+}
+
+fn sides_equal<T: Clone + std::fmt::Debug + Default + PartialEq>(
+  sides: &gpui::EdgesRefinement<T>,
+  value: T,
+) -> bool {
+  sides.top.as_ref() == Some(&value)
+    && sides.right.as_ref() == Some(&value)
+    && sides.bottom.as_ref() == Some(&value)
+    && sides.left.as_ref() == Some(&value)
+}
+
+fn wide_width(size: gpui::Size<gpui::Pixels>) -> Option<gpui::Length> {
+  Some(gpui::px(f32::from(size.width) + 40.0).into())
+}
+
+fn narrow_width(size: gpui::Size<gpui::Pixels>) -> Option<gpui::Length> {
+  Some(gpui::px((f32::from(size.width) - 40.0).max(1.0)).into())
+}
+
+fn tall_height(size: gpui::Size<gpui::Pixels>) -> Option<gpui::Length> {
+  Some(gpui::px(f32::from(size.height) + 40.0).into())
+}
+
+fn short_height(size: gpui::Size<gpui::Pixels>) -> Option<gpui::Length> {
+  Some(gpui::px((f32::from(size.height) - 40.0).max(1.0)).into())
+}
+
+fn edit_padding() -> gpui::DefiniteLength {
+  gpui::px(12.0).into()
+}
+
+fn edit_margin() -> gpui::Length {
+  gpui::px(8.0).into()
+}
+
+fn edit_border() -> gpui::AbsoluteLength {
+  gpui::px(2.0).into()
+}
+
+fn edit_border_color() -> gpui::Hsla {
+  rgb(0x61afef).into()
+}
+
+fn edit_background() -> gpui::Fill {
+  rgb(0x1f4f73).into()
 }
 
 fn optional_debug<T: std::fmt::Debug>(value: Option<&T>) -> String {
@@ -1821,6 +1952,20 @@ mod tests {
 
     apply_style_edit(&mut style, StyleEdit::Hide, current_size);
     assert_eq!(style.visibility, Some(gpui::Visibility::Hidden));
+  }
+
+  #[test]
+  fn style_edit_active_state_and_restore_are_per_property() {
+    let original = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+    let mut style = original.clone();
+
+    apply_style_edit(&mut style, StyleEdit::Hide, current_size);
+    assert!(is_style_edit_active(&style, StyleEdit::Hide, current_size));
+
+    restore_style_edit(&mut style, StyleEdit::Hide, &original);
+    assert!(!is_style_edit_active(&style, StyleEdit::Hide, current_size));
+    assert_eq!(style.visibility, original.visibility);
   }
 
   #[test]
