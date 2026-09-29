@@ -21,11 +21,11 @@
 
 #![warn(missing_docs)]
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
   App, Context, Div, DivInspectorState, Inspector, InspectorElementId, IntoElement, KeyBinding,
-  Window, actions, div, img, prelude::*, rgb,
+  Window, actions, div, prelude::*, rgb,
 };
 
 const DEFAULT_MACOS_KEY_BINDING: &str = "cmd-alt-i";
@@ -255,20 +255,6 @@ fn render_inspector(
     .child(content)
 }
 
-fn render_icon(svg: &'static [u8], color: u32) -> gpui::Img {
-  img(Arc::new(gpui::Image::from_bytes(
-    gpui::ImageFormat::Svg,
-    recolor_svg(svg, color),
-  )))
-}
-
-fn recolor_svg(svg: &[u8], color: u32) -> Vec<u8> {
-  let color = format!("#{:06x}", color & 0xffffff);
-  String::from_utf8_lossy(svg)
-    .replace("currentColor", &color)
-    .into_bytes()
-}
-
 fn render_empty_state(is_picking: bool, config: &Config) -> Div {
   let (title, description) = empty_state_copy(is_picking);
 
@@ -383,85 +369,12 @@ mod box_model;
 mod copy;
 mod styles;
 mod temporary_edits;
+mod ui;
 use box_model::render_box_model;
 use copy::{CopyFeedback, CopyTarget, CopyableProperty, copyable_property};
 use styles::render_styles;
 use temporary_edits::{StyleEditState, render_style_edits};
-
-fn geometry_label(label: &'static str, value: String, config: &Config) -> Div {
-  div()
-    .flex()
-    .items_center()
-    .justify_between()
-    .gap_2()
-    .overflow_hidden()
-    .text_xs()
-    .child(
-      div()
-        .w_0()
-        .flex_1()
-        .truncate()
-        .text_color(rgb(config.muted_text))
-        .child(label),
-    )
-    .child(
-      div()
-        .w_0()
-        .flex_1()
-        .truncate()
-        .font_family("monospace")
-        .text_right()
-        .child(value),
-    )
-}
-
-fn section(title: &'static str, config: &Config) -> Div {
-  div()
-    .p_3()
-    .flex()
-    .flex_col()
-    .gap_2()
-    .rounded_md()
-    .bg(rgb(config.panel_background))
-    .border_1()
-    .border_color(rgb(config.border))
-    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(title))
-}
-
-fn property(label: &'static str, value: String, config: &Config) -> Div {
-  property_with_action(label, value, None, config)
-}
-
-pub(crate) fn property_with_action(
-  label: &'static str,
-  value: String,
-  action: Option<gpui::AnyElement>,
-  config: &Config,
-) -> Div {
-  div()
-    .overflow_hidden()
-    .flex()
-    .flex_col()
-    .gap_1()
-    .child(
-      div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .text_xs()
-        .text_color(rgb(config.muted_text))
-        .child(label)
-        .when_some(action, |label, action| label.child(action)),
-    )
-    .child(
-      div()
-        .w_full()
-        .truncate()
-        .text_sm()
-        .font_family("monospace")
-        .child(value),
-    )
-}
+use ui::{property, render_icon, section};
 
 fn truncate_middle(value: &str, max_chars: usize) -> String {
   let chars = value.chars().collect::<Vec<_>>();
@@ -530,6 +443,7 @@ mod tests {
     restore_style_edit, style_edit_diff, style_edit_diff_label, style_rust_snippet, style_summary,
     style_summary_with_overrides,
   };
+  use crate::ui::recolor_svg;
   use gpui::StyleRefinement;
 
   #[test]

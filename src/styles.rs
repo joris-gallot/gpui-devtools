@@ -1,6 +1,6 @@
 use gpui::{Div, StyleRefinement, div, prelude::*, rgb};
 
-use crate::{Config, section};
+use crate::{Config, ui::section};
 
 pub(crate) fn render_styles(style: &StyleRefinement, config: &Config) -> Div {
   let groups = style_groups(style);

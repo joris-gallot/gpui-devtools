@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{ClipboardItem, Context, Div, Inspector, IntoElement, div, prelude::*, rgb};
 
-use crate::{Config, property_with_action};
+use crate::{Config, ui::property_with_action};
 
 const COPY_FEEDBACK_DURATION: Duration = Duration::from_millis(1500);
 

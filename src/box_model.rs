@@ -1,6 +1,6 @@
 use gpui::{Div, DivInspectorState, IntoElement, StyleRefinement, div, prelude::*, rgb};
 
-use crate::{Config, geometry_label};
+use crate::{Config, ui::geometry_label};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct BoxModel {
