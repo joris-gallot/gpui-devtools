@@ -181,6 +181,10 @@ fn style_export_buttons_copy_the_selected_element_styles(cx: &mut TestAppContext
     .read_from_clipboard()
     .and_then(|item| item.text())
     .expect("style summary should be copied");
+  assert!(copied.contains("Active overrides:"));
+  assert!(copied.contains("Padding:"));
+  assert!(copied.contains("-> px(12.0)"));
+  assert!(copied.contains("Full style:"));
   assert!(copied.contains("Spacing:"));
   assert!(copied.contains("Padding: 12px"));
 

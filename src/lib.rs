@@ -510,7 +510,7 @@ fn render_style_edits(
       style_edits,
       config,
     ))
-    .child(render_export_group(state, config))
+    .child(render_export_group(&id, state, style_edits, config))
 }
 
 fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
@@ -643,7 +643,12 @@ fn render_edit_group(
     ))
 }
 
-fn render_export_group(state: &DivInspectorState, config: &Config) -> Div {
+fn render_export_group(
+  id: &InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
   div()
     .flex()
     .flex_col()
@@ -663,7 +668,7 @@ fn render_export_group(state: &DivInspectorState, config: &Config) -> Div {
         .child(style_copy_button(
           "gpui-devtools-copy-style-summary",
           "Copy summary",
-          style_summary(&state.base_style),
+          style_summary_with_overrides(id, state, style_edits),
           config,
         ))
         .child(style_copy_button(
@@ -941,6 +946,18 @@ fn style_edit_diff_label(
   current: &StyleRefinement,
   original_size: gpui::Size<gpui::Pixels>,
 ) -> String {
+  format!(
+    "{} x",
+    style_edit_diff(edit, original, current, original_size)
+  )
+}
+
+fn style_edit_diff(
+  edit: StyleEdit,
+  original: &StyleRefinement,
+  current: &StyleRefinement,
+  original_size: gpui::Size<gpui::Pixels>,
+) -> String {
   let (label, before, after) = match edit {
     StyleEdit::Wider | StyleEdit::Narrower => (
       "Width",
@@ -1003,7 +1020,7 @@ fn style_edit_diff_label(
     StyleEdit::Reset => ("Reset", "".into(), "".into()),
   };
 
-  format!("{label}: {before} -> {after} x")
+  format!("{label}: {before} -> {after}")
 }
 
 fn style_sides_value<T: Clone + std::fmt::Debug + Default + PartialEq>(
@@ -1088,6 +1105,32 @@ fn optional_debug<T: std::fmt::Debug>(value: Option<&T>) -> String {
   value
     .map(|value| format!("{value:?}"))
     .unwrap_or_else(|| "auto".into())
+}
+
+fn style_summary_with_overrides(
+  id: &InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+) -> String {
+  let Some((original_style, original_size)) = style_edits.borrow().original_for(id) else {
+    return style_summary(&state.base_style);
+  };
+  let active = active_style_edits(&state.base_style, original_size);
+  if active.is_empty() {
+    return style_summary(&state.base_style);
+  }
+
+  let mut lines = vec!["Active overrides:".to_owned()];
+  lines.extend(active.into_iter().map(|edit| {
+    format!(
+      "  {}",
+      style_edit_diff(edit, &original_style, &state.base_style, original_size)
+    )
+  }));
+  lines.push(String::new());
+  lines.push("Full style:".into());
+  lines.push(style_summary(&state.base_style));
+  lines.join("\n")
 }
 
 fn style_summary(style: &StyleRefinement) -> String {
@@ -2332,12 +2375,47 @@ mod tests {
       style_edit_diff_label(StyleEdit::Hide, &original, &current, current_size),
       "Visibility: auto -> Hidden x"
     );
+    assert_eq!(
+      style_edit_diff(StyleEdit::Hide, &original, &current, current_size),
+      "Visibility: auto -> Hidden"
+    );
 
     apply_style_edit(&mut current, StyleEdit::Padding, current_size);
     assert_eq!(
       style_edit_diff_label(StyleEdit::Padding, &original, &current, current_size),
       "Padding: auto -> px(12.0) x"
     );
+  }
+
+  #[test]
+  fn style_summary_with_overrides_includes_active_diffs() {
+    let id = InspectorElementId {
+      path: std::rc::Rc::new(gpui::InspectorElementPath {
+        global_id: gpui::GlobalElementId::default(),
+        source_location: std::panic::Location::caller(),
+      }),
+      instance_id: 0,
+    };
+    let original = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+    let mut current = original.clone();
+    apply_style_edit(&mut current, StyleEdit::Hide, current_size);
+
+    let mut edits = StyleEditState::default();
+    edits.select(id.clone(), &original, current_size);
+    let state = DivInspectorState {
+      base_style: Box::new(current),
+      bounds: gpui::Bounds {
+        origin: gpui::Point::default(),
+        size: current_size,
+      },
+      content_size: current_size,
+    };
+    let summary = style_summary_with_overrides(&id, &state, &Rc::new(RefCell::new(edits)));
+
+    assert!(summary.contains("Active overrides:"));
+    assert!(summary.contains("Visibility: auto -> Hidden"));
+    assert!(summary.contains("Full style:"));
   }
 
   #[test]
