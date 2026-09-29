@@ -488,10 +488,10 @@ pub(crate) fn restore_style_edit(
 ) {
   match edit {
     StyleEdit::Wider | StyleEdit::Narrower => {
-      style.size.width = original.size.width.clone();
+      style.size.width = original.size.width;
     }
     StyleEdit::Taller | StyleEdit::Shorter => {
-      style.size.height = original.size.height.clone();
+      style.size.height = original.size.height;
     }
     StyleEdit::Padding => {
       style.padding = original.padding.clone();
