@@ -27,6 +27,22 @@ pub(crate) enum StyleEdit {
   Reset,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StyleIncrement {
+  WidthDown,
+  WidthUp,
+  HeightDown,
+  HeightUp,
+  PaddingDown,
+  PaddingUp,
+  MarginDown,
+  MarginUp,
+  BorderDown,
+  BorderUp,
+  OpacityDown,
+  OpacityUp,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct StyleEditState {
   selected: Option<InspectorElementId>,
@@ -88,6 +104,8 @@ pub(crate) fn render_style_edits(
     )
     .child(render_edit_snapshot(state, config))
     .child(render_active_overrides(&id, state, style_edits, config))
+    .child(render_reset_row(&id, state, style_edits, config))
+    .child(render_export_group(&id, state, style_edits, config))
     .child(render_edit_group(
       "Layout",
       &[
@@ -99,6 +117,28 @@ pub(crate) fn render_style_edits(
         ),
         ("gpui-devtools-style-taller", "Taller", StyleEdit::Taller),
         ("gpui-devtools-style-shorter", "Shorter", StyleEdit::Shorter),
+      ],
+      &[
+        (
+          "gpui-devtools-style-width-down",
+          "Width -10",
+          StyleIncrement::WidthDown,
+        ),
+        (
+          "gpui-devtools-style-width-up",
+          "Width +10",
+          StyleIncrement::WidthUp,
+        ),
+        (
+          "gpui-devtools-style-height-down",
+          "Height -10",
+          StyleIncrement::HeightDown,
+        ),
+        (
+          "gpui-devtools-style-height-up",
+          "Height +10",
+          StyleIncrement::HeightUp,
+        ),
       ],
       &id,
       state,
@@ -115,6 +155,38 @@ pub(crate) fn render_style_edits(
         ),
         ("gpui-devtools-style-margin", "Margin 8", StyleEdit::Margin),
         ("gpui-devtools-style-border", "Border 2", StyleEdit::Border),
+      ],
+      &[
+        (
+          "gpui-devtools-style-padding-down",
+          "Padding -1",
+          StyleIncrement::PaddingDown,
+        ),
+        (
+          "gpui-devtools-style-padding-up",
+          "Padding +1",
+          StyleIncrement::PaddingUp,
+        ),
+        (
+          "gpui-devtools-style-margin-down",
+          "Margin -1",
+          StyleIncrement::MarginDown,
+        ),
+        (
+          "gpui-devtools-style-margin-up",
+          "Margin +1",
+          StyleIncrement::MarginUp,
+        ),
+        (
+          "gpui-devtools-style-border-down",
+          "Border -1",
+          StyleIncrement::BorderDown,
+        ),
+        (
+          "gpui-devtools-style-border-up",
+          "Border +1",
+          StyleIncrement::BorderUp,
+        ),
       ],
       &id,
       state,
@@ -134,15 +206,24 @@ pub(crate) fn render_style_edits(
           "Accent bg",
           StyleEdit::AccentBackground,
         ),
-        ("gpui-devtools-style-hide", "Hide", StyleEdit::Hide),
-        ("gpui-devtools-style-reset", "Reset", StyleEdit::Reset),
+      ],
+      &[
+        (
+          "gpui-devtools-style-opacity-down",
+          "Opacity -10%",
+          StyleIncrement::OpacityDown,
+        ),
+        (
+          "gpui-devtools-style-opacity-up",
+          "Opacity +10%",
+          StyleIncrement::OpacityUp,
+        ),
       ],
       &id,
       state,
       style_edits,
       config,
     ))
-    .child(render_export_group(&id, state, style_edits, config))
 }
 
 fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
@@ -181,7 +262,7 @@ fn render_active_overrides(
   let Some((original_style, original_size)) = style_edits.borrow().original_for(id) else {
     return div();
   };
-  let active = active_style_edits(&state.base_style, original_size);
+  let active = active_style_overrides(&state.base_style, &original_style, original_size);
   if active.is_empty() {
     return div();
   }
@@ -250,6 +331,7 @@ fn remove_style_edit_button(
 fn render_edit_group(
   title: &'static str,
   actions: &[(&'static str, &'static str, StyleEdit)],
+  increments: &[(&'static str, &'static str, StyleIncrement)],
   id: &InspectorElementId,
   state: &DivInspectorState,
   style_edits: &Rc<RefCell<StyleEditState>>,
@@ -271,6 +353,47 @@ fn render_edit_group(
       id,
       state,
       style_edits,
+      config,
+    ))
+    .child(render_increment_button_row(
+      increments,
+      id,
+      style_edits,
+      config,
+    ))
+}
+
+fn render_reset_row(
+  id: &InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  let original_size = style_edits
+    .borrow()
+    .original_for(id)
+    .map(|(_, size)| size)
+    .unwrap_or(state.bounds.size);
+
+  div()
+    .flex()
+    .gap_2()
+    .child(style_edit_button(
+      "gpui-devtools-style-hide",
+      "Hide",
+      StyleEdit::Hide,
+      id.clone(),
+      Rc::clone(style_edits),
+      is_style_edit_active(&state.base_style, StyleEdit::Hide, original_size),
+      config,
+    ))
+    .child(style_edit_button(
+      "gpui-devtools-style-reset",
+      "Reset",
+      StyleEdit::Reset,
+      id.clone(),
+      Rc::clone(style_edits),
+      false,
       config,
     ))
 }
@@ -342,6 +465,28 @@ fn render_edit_button_row(
     }))
 }
 
+fn render_increment_button_row(
+  increments: &[(&'static str, &'static str, StyleIncrement)],
+  id: &InspectorElementId,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  div()
+    .flex()
+    .flex_wrap()
+    .gap_2()
+    .children(increments.iter().map(|(selector, label, increment)| {
+      style_increment_button(
+        selector,
+        label,
+        *increment,
+        id.clone(),
+        Rc::clone(style_edits),
+        config,
+      )
+    }))
+}
+
 fn style_edit_button(
   selector: &'static str,
   label: &'static str,
@@ -378,6 +523,32 @@ fn style_edit_button(
     });
     window.refresh();
   })
+}
+
+fn style_increment_button(
+  selector: &'static str,
+  label: &'static str,
+  increment: StyleIncrement,
+  id: InspectorElementId,
+  style_edits: Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> impl IntoElement {
+  inspector_button(selector, label.to_owned(), false, false, config).on_click(
+    move |_, window, cx| {
+      let original = style_edits.borrow().original_for(&id);
+      let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
+        let Some(state) = state else {
+          return;
+        };
+        let Some((_, original_size)) = original else {
+          return;
+        };
+
+        apply_style_increment(&mut state.base_style, increment, original_size);
+      });
+      window.refresh();
+    },
+  )
 }
 
 fn style_copy_button(
@@ -481,6 +652,30 @@ pub(crate) fn apply_style_edit(
   }
 }
 
+pub(crate) fn apply_style_increment(
+  style: &mut StyleRefinement,
+  increment: StyleIncrement,
+  original_size: gpui::Size<gpui::Pixels>,
+) {
+  match increment {
+    StyleIncrement::WidthDown => adjust_width(style, original_size, -10.0),
+    StyleIncrement::WidthUp => adjust_width(style, original_size, 10.0),
+    StyleIncrement::HeightDown => adjust_height(style, original_size, -10.0),
+    StyleIncrement::HeightUp => adjust_height(style, original_size, 10.0),
+    StyleIncrement::PaddingDown => adjust_definite_edges(&mut style.padding, -1.0),
+    StyleIncrement::PaddingUp => adjust_definite_edges(&mut style.padding, 1.0),
+    StyleIncrement::MarginDown => adjust_length_edges(&mut style.margin, -1.0),
+    StyleIncrement::MarginUp => adjust_length_edges(&mut style.margin, 1.0),
+    StyleIncrement::BorderDown => adjust_absolute_edges(&mut style.border_widths, -1.0),
+    StyleIncrement::BorderUp => {
+      adjust_absolute_edges(&mut style.border_widths, 1.0);
+      style.border_color.get_or_insert_with(edit_border_color);
+    }
+    StyleIncrement::OpacityDown => adjust_opacity(style, -0.1),
+    StyleIncrement::OpacityUp => adjust_opacity(style, 0.1),
+  }
+}
+
 pub(crate) fn restore_style_edit(
   style: &mut StyleRefinement,
   edit: StyleEdit,
@@ -558,6 +753,47 @@ pub(crate) fn active_style_edits(
   .into_iter()
   .filter(|edit| is_style_edit_active(style, *edit, original_size))
   .collect()
+}
+
+fn active_style_overrides(
+  current: &StyleRefinement,
+  original: &StyleRefinement,
+  original_size: gpui::Size<gpui::Pixels>,
+) -> Vec<StyleEdit> {
+  let mut active = Vec::new();
+
+  if current.size.width != original.size.width {
+    active.push(StyleEdit::Wider);
+  }
+  if current.size.height != original.size.height {
+    active.push(StyleEdit::Taller);
+  }
+  if current.padding != original.padding {
+    active.push(StyleEdit::Padding);
+  }
+  if current.margin != original.margin {
+    active.push(StyleEdit::Margin);
+  }
+  if current.border_widths != original.border_widths
+    || current.border_color != original.border_color
+  {
+    active.push(StyleEdit::Border);
+  }
+  if current.opacity != original.opacity {
+    active.push(StyleEdit::HalfOpacity);
+  }
+  if current.background != original.background {
+    active.push(StyleEdit::AccentBackground);
+  }
+  if current.visibility != original.visibility {
+    active.push(StyleEdit::Hide);
+  }
+
+  if active.is_empty() {
+    active_style_edits(current, original_size)
+  } else {
+    active
+  }
 }
 
 fn style_edit_remove_selector(edit: StyleEdit) -> &'static str {
@@ -701,6 +937,85 @@ fn sides_equal<T: Clone + std::fmt::Debug + Default + PartialEq>(
     && sides.left.as_ref() == Some(&value)
 }
 
+fn adjust_width(style: &mut StyleRefinement, size: gpui::Size<gpui::Pixels>, delta: f32) {
+  style.size.width = Some(adjusted_length(style.size.width, size.width, delta, 1.0));
+}
+
+fn adjust_height(style: &mut StyleRefinement, size: gpui::Size<gpui::Pixels>, delta: f32) {
+  style.size.height = Some(adjusted_length(style.size.height, size.height, delta, 1.0));
+}
+
+fn adjusted_length(
+  value: Option<gpui::Length>,
+  fallback: gpui::Pixels,
+  delta: f32,
+  minimum: f32,
+) -> gpui::Length {
+  gpui::px((length_pixels(value, fallback) + delta).max(minimum)).into()
+}
+
+fn length_pixels(value: Option<gpui::Length>, fallback: gpui::Pixels) -> f32 {
+  match value {
+    Some(gpui::Length::Definite(length)) => {
+      f32::from(length.to_pixels(gpui::AbsoluteLength::Pixels(fallback), gpui::px(16.0)))
+    }
+    Some(gpui::Length::Auto) | None => f32::from(fallback),
+  }
+}
+
+fn adjust_definite_edges(edges: &mut gpui::EdgesRefinement<gpui::DefiniteLength>, delta: f32) {
+  edges.top = Some(adjusted_definite_length(edges.top, delta));
+  edges.right = Some(adjusted_definite_length(edges.right, delta));
+  edges.bottom = Some(adjusted_definite_length(edges.bottom, delta));
+  edges.left = Some(adjusted_definite_length(edges.left, delta));
+}
+
+fn adjusted_definite_length(
+  value: Option<gpui::DefiniteLength>,
+  delta: f32,
+) -> gpui::DefiniteLength {
+  gpui::px((definite_pixels(value) + delta).max(0.0)).into()
+}
+
+fn definite_pixels(value: Option<gpui::DefiniteLength>) -> f32 {
+  value
+    .map(|value| {
+      f32::from(value.to_pixels(gpui::AbsoluteLength::Pixels(gpui::px(0.0)), gpui::px(16.0)))
+    })
+    .unwrap_or(0.0)
+}
+
+fn adjust_length_edges(edges: &mut gpui::EdgesRefinement<gpui::Length>, delta: f32) {
+  edges.top = Some(adjusted_length(edges.top, gpui::px(0.0), delta, 0.0));
+  edges.right = Some(adjusted_length(edges.right, gpui::px(0.0), delta, 0.0));
+  edges.bottom = Some(adjusted_length(edges.bottom, gpui::px(0.0), delta, 0.0));
+  edges.left = Some(adjusted_length(edges.left, gpui::px(0.0), delta, 0.0));
+}
+
+fn adjust_absolute_edges(edges: &mut gpui::EdgesRefinement<gpui::AbsoluteLength>, delta: f32) {
+  edges.top = Some(adjusted_absolute_length(edges.top, delta));
+  edges.right = Some(adjusted_absolute_length(edges.right, delta));
+  edges.bottom = Some(adjusted_absolute_length(edges.bottom, delta));
+  edges.left = Some(adjusted_absolute_length(edges.left, delta));
+}
+
+fn adjusted_absolute_length(
+  value: Option<gpui::AbsoluteLength>,
+  delta: f32,
+) -> gpui::AbsoluteLength {
+  gpui::px((absolute_pixels(value) + delta).max(0.0)).into()
+}
+
+fn absolute_pixels(value: Option<gpui::AbsoluteLength>) -> f32 {
+  value
+    .map(|value| f32::from(value.to_pixels(gpui::px(16.0))))
+    .unwrap_or(0.0)
+}
+
+fn adjust_opacity(style: &mut StyleRefinement, delta: f32) {
+  style.opacity = Some((style.opacity.unwrap_or(1.0) + delta).clamp(0.0, 1.0));
+}
+
 fn wide_width(size: gpui::Size<gpui::Pixels>) -> Option<gpui::Length> {
   Some(gpui::px(f32::from(size.width) + 40.0).into())
 }
@@ -751,7 +1066,7 @@ pub(crate) fn style_summary_with_overrides(
   let Some((original_style, original_size)) = style_edits.borrow().original_for(id) else {
     return style_summary(&state.base_style);
   };
-  let active = active_style_edits(&state.base_style, original_size);
+  let active = active_style_overrides(&state.base_style, &original_style, original_size);
   if active.is_empty() {
     return style_summary(&state.base_style);
   }

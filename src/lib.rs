@@ -439,9 +439,9 @@ mod tests {
     push_underline, style_groups,
   };
   use crate::temporary_edits::{
-    StyleEdit, StyleEditState, active_style_edits, apply_style_edit, is_style_edit_active,
-    restore_style_edit, style_edit_diff, style_edit_diff_label, style_rust_snippet, style_summary,
-    style_summary_with_overrides,
+    StyleEdit, StyleEditState, StyleIncrement, active_style_edits, apply_style_edit,
+    apply_style_increment, is_style_edit_active, restore_style_edit, style_edit_diff,
+    style_edit_diff_label, style_rust_snippet, style_summary, style_summary_with_overrides,
   };
   use crate::ui::recolor_svg;
   use gpui::StyleRefinement;
@@ -597,6 +597,34 @@ mod tests {
 
     apply_style_edit(&mut style, StyleEdit::Hide, current_size);
     assert_eq!(style.visibility, Some(gpui::Visibility::Hidden));
+  }
+
+  #[test]
+  fn incremental_style_edits_adjust_refinements() {
+    let mut style = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+
+    apply_style_increment(&mut style, StyleIncrement::WidthUp, current_size);
+    assert_eq!(style.size.width, Some(gpui::px(110.0).into()));
+
+    apply_style_increment(&mut style, StyleIncrement::HeightDown, current_size);
+    assert_eq!(style.size.height, Some(gpui::px(30.0).into()));
+
+    apply_style_increment(&mut style, StyleIncrement::PaddingUp, current_size);
+    apply_style_increment(&mut style, StyleIncrement::PaddingUp, current_size);
+    apply_style_increment(&mut style, StyleIncrement::PaddingDown, current_size);
+    assert_eq!(style.padding.top, Some(gpui::px(1.0).into()));
+    assert_eq!(style.padding.right, Some(gpui::px(1.0).into()));
+
+    apply_style_increment(&mut style, StyleIncrement::BorderUp, current_size);
+    assert_eq!(style.border_widths.top, Some(gpui::px(1.0).into()));
+    assert_eq!(style.border_color, Some(rgb(0x61afef).into()));
+
+    apply_style_increment(&mut style, StyleIncrement::OpacityDown, current_size);
+    assert_eq!(style.opacity, Some(0.9));
+
+    apply_style_increment(&mut style, StyleIncrement::OpacityUp, current_size);
+    assert_eq!(style.opacity, Some(1.0));
   }
 
   #[test]
