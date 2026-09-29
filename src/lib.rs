@@ -367,6 +367,7 @@ fn render_div_state(
 
 mod box_model;
 mod copy;
+mod style_export;
 mod styles;
 mod temporary_edits;
 mod ui;
@@ -433,6 +434,10 @@ mod tests {
   use super::*;
   use crate::box_model::{BoxModel, EdgeValues, box_model, compact_size};
   use crate::copy::{CopyFeedback, CopyTarget, text_clipboard_item};
+  use crate::style_export::{
+    style_edit_diff, style_edit_diff_label, style_rust_snippet, style_summary,
+    style_summary_with_overrides,
+  };
   use crate::styles::{
     StyleGroup, StyleProperty, format_color, format_fill, push_compact_sides, push_font_fallbacks,
     push_font_features, push_shadows, push_strikethrough, push_text, push_text_overflow,
@@ -440,8 +445,7 @@ mod tests {
   };
   use crate::temporary_edits::{
     StyleEdit, StyleEditState, StyleIncrement, active_style_edits, apply_style_edit,
-    apply_style_increment, is_style_edit_active, restore_style_edit, style_edit_diff,
-    style_edit_diff_label, style_rust_snippet, style_summary, style_summary_with_overrides,
+    apply_style_increment, is_style_edit_active, restore_style_edit,
   };
   use crate::ui::recolor_svg;
   use gpui::StyleRefinement;
