@@ -55,7 +55,8 @@ pub(crate) fn render_computed(
     .debug_selector(|| "gpui-devtools-computed".into())
     .child(
       div()
-        .grid()
+        .flex()
+        .flex_col()
         .gap_1()
         .text_xs()
         .child(geometry_label("Bounds", computed.bounds_size, config))
