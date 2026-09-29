@@ -546,7 +546,7 @@ fn render_active_overrides(
   style_edits: &Rc<RefCell<StyleEditState>>,
   config: &Config,
 ) -> Div {
-  let Some((_, original_size)) = style_edits.borrow().original_for(id) else {
+  let Some((original_style, original_size)) = style_edits.borrow().original_for(id) else {
     return div();
   };
   let active = active_style_edits(&state.base_style, original_size);
@@ -565,23 +565,36 @@ fn render_active_overrides(
         .child("Active overrides"),
     )
     .child(
-      div().flex().flex_wrap().gap_2().children(
-        active
-          .into_iter()
-          .map(|edit| remove_style_edit_button(id.clone(), edit, Rc::clone(style_edits), config)),
-      ),
+      div()
+        .flex()
+        .flex_wrap()
+        .gap_2()
+        .children(active.into_iter().map(|edit| {
+          remove_style_edit_button(
+            id.clone(),
+            edit,
+            &original_style,
+            &state.base_style,
+            original_size,
+            Rc::clone(style_edits),
+            config,
+          )
+        })),
     )
 }
 
 fn remove_style_edit_button(
   id: InspectorElementId,
   edit: StyleEdit,
+  original_style: &StyleRefinement,
+  current_style: &StyleRefinement,
+  original_size: gpui::Size<gpui::Pixels>,
   style_edits: Rc<RefCell<StyleEditState>>,
   config: &Config,
 ) -> impl IntoElement {
   inspector_button(
     style_edit_remove_selector(edit),
-    style_edit_remove_label(edit),
+    style_edit_diff_label(edit, original_style, current_style, original_size),
     false,
     true,
     config,
@@ -701,28 +714,33 @@ fn style_edit_button(
   active: bool,
   config: &Config,
 ) -> impl IntoElement {
-  inspector_button(selector, label, edit == StyleEdit::Reset, active, config).on_click(
-    move |_, window, cx| {
-      let original = style_edits.borrow().original_for(&id);
-      let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
-        let Some(state) = state else {
-          return;
-        };
-        let Some((original_style, original_size)) = original else {
-          return;
-        };
-
-        if edit == StyleEdit::Reset {
-          *state.base_style = original_style;
-        } else if is_style_edit_active(&state.base_style, edit, original_size) {
-          restore_style_edit(&mut state.base_style, edit, &original_style);
-        } else {
-          apply_style_edit(&mut state.base_style, edit, original_size);
-        }
-      });
-      window.refresh();
-    },
+  inspector_button(
+    selector,
+    label.to_owned(),
+    edit == StyleEdit::Reset,
+    active,
+    config,
   )
+  .on_click(move |_, window, cx| {
+    let original = style_edits.borrow().original_for(&id);
+    let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
+      let Some(state) = state else {
+        return;
+      };
+      let Some((original_style, original_size)) = original else {
+        return;
+      };
+
+      if edit == StyleEdit::Reset {
+        *state.base_style = original_style;
+      } else if is_style_edit_active(&state.base_style, edit, original_size) {
+        restore_style_edit(&mut state.base_style, edit, &original_style);
+      } else {
+        apply_style_edit(&mut state.base_style, edit, original_size);
+      }
+    });
+    window.refresh();
+  })
 }
 
 fn style_copy_button(
@@ -731,14 +749,16 @@ fn style_copy_button(
   value: String,
   config: &Config,
 ) -> impl IntoElement {
-  inspector_button(selector, label, false, false, config).on_click(move |_, _window, cx| {
-    cx.write_to_clipboard(text_clipboard_item(value.clone()));
-  })
+  inspector_button(selector, label.to_owned(), false, false, config).on_click(
+    move |_, _window, cx| {
+      cx.write_to_clipboard(text_clipboard_item(value.clone()));
+    },
+  )
 }
 
 fn inspector_button(
   selector: &'static str,
-  label: &'static str,
+  label: String,
   muted: bool,
   active: bool,
   config: &Config,
@@ -915,20 +935,107 @@ fn style_edit_remove_selector(edit: StyleEdit) -> &'static str {
   }
 }
 
-fn style_edit_remove_label(edit: StyleEdit) -> &'static str {
-  match edit {
-    StyleEdit::Wider => "Wider x",
-    StyleEdit::Narrower => "Narrower x",
-    StyleEdit::Taller => "Taller x",
-    StyleEdit::Shorter => "Shorter x",
-    StyleEdit::Padding => "Padding x",
-    StyleEdit::Margin => "Margin x",
-    StyleEdit::Border => "Border x",
-    StyleEdit::HalfOpacity => "Opacity x",
-    StyleEdit::AccentBackground => "Accent bg x",
-    StyleEdit::Hide => "Hide x",
-    StyleEdit::Reset => "Reset x",
+fn style_edit_diff_label(
+  edit: StyleEdit,
+  original: &StyleRefinement,
+  current: &StyleRefinement,
+  original_size: gpui::Size<gpui::Pixels>,
+) -> String {
+  let (label, before, after) = match edit {
+    StyleEdit::Wider | StyleEdit::Narrower => (
+      "Width",
+      original
+        .size
+        .width
+        .as_ref()
+        .map(rust_debug_value)
+        .unwrap_or_else(|| compact_pixels(original_size.width)),
+      optional_debug(current.size.width.as_ref()),
+    ),
+    StyleEdit::Taller | StyleEdit::Shorter => (
+      "Height",
+      original
+        .size
+        .height
+        .as_ref()
+        .map(rust_debug_value)
+        .unwrap_or_else(|| compact_pixels(original_size.height)),
+      optional_debug(current.size.height.as_ref()),
+    ),
+    StyleEdit::Padding => (
+      "Padding",
+      style_sides_value(&original.padding),
+      style_sides_value(&current.padding),
+    ),
+    StyleEdit::Margin => (
+      "Margin",
+      style_sides_value(&original.margin),
+      style_sides_value(&current.margin),
+    ),
+    StyleEdit::Border => (
+      "Border",
+      style_sides_value(&original.border_widths),
+      style_sides_value(&current.border_widths),
+    ),
+    StyleEdit::HalfOpacity => (
+      "Opacity",
+      optional_debug(original.opacity.as_ref()),
+      optional_debug(current.opacity.as_ref()),
+    ),
+    StyleEdit::AccentBackground => (
+      "Background",
+      original
+        .background
+        .as_ref()
+        .map(format_fill)
+        .unwrap_or_else(|| "auto".into()),
+      current
+        .background
+        .as_ref()
+        .map(format_fill)
+        .unwrap_or_else(|| "auto".into()),
+    ),
+    StyleEdit::Hide => (
+      "Visibility",
+      optional_debug(original.visibility.as_ref()),
+      optional_debug(current.visibility.as_ref()),
+    ),
+    StyleEdit::Reset => ("Reset", "".into(), "".into()),
+  };
+
+  format!("{label}: {before} -> {after} x")
+}
+
+fn style_sides_value<T: Clone + std::fmt::Debug + Default + PartialEq>(
+  sides: &gpui::EdgesRefinement<T>,
+) -> String {
+  let top = sides.top.as_ref();
+  let right = sides.right.as_ref();
+  let bottom = sides.bottom.as_ref();
+  let left = sides.left.as_ref();
+
+  if top.is_none() && right.is_none() && bottom.is_none() && left.is_none() {
+    return "auto".into();
   }
+
+  if let (Some(top), Some(right), Some(bottom), Some(left)) = (top, right, bottom, left) {
+    if top == right && top == bottom && top == left {
+      return rust_debug_value(top);
+    }
+    if top == bottom && right == left {
+      return format!("{} {}", rust_debug_value(top), rust_debug_value(right));
+    }
+  }
+
+  format!(
+    "{} {} {} {}",
+    top.map(rust_debug_value).unwrap_or_else(|| "auto".into()),
+    right.map(rust_debug_value).unwrap_or_else(|| "auto".into()),
+    bottom
+      .map(rust_debug_value)
+      .unwrap_or_else(|| "auto".into()),
+    left.map(rust_debug_value).unwrap_or_else(|| "auto".into())
+  )
 }
 
 fn sides_equal<T: Clone + std::fmt::Debug + Default + PartialEq>(
@@ -2212,6 +2319,25 @@ mod tests {
     assert!(!is_style_edit_active(&style, StyleEdit::Hide, current_size));
     assert!(!active_style_edits(&style, current_size).contains(&StyleEdit::Hide));
     assert_eq!(style.visibility, original.visibility);
+  }
+
+  #[test]
+  fn active_override_labels_show_original_and_current_values() {
+    let original = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+    let mut current = original.clone();
+
+    apply_style_edit(&mut current, StyleEdit::Hide, current_size);
+    assert_eq!(
+      style_edit_diff_label(StyleEdit::Hide, &original, &current, current_size),
+      "Visibility: auto -> Hidden x"
+    );
+
+    apply_style_edit(&mut current, StyleEdit::Padding, current_size);
+    assert_eq!(
+      style_edit_diff_label(StyleEdit::Padding, &original, &current, current_size),
+      "Padding: auto -> px(12.0) x"
+    );
   }
 
   #[test]
