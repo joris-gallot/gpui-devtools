@@ -158,7 +158,7 @@ fn temporary_style_edits_toggle_their_override(cx: &mut TestAppContext) {
     .expect("style summary should be copied");
   assert!(copied.contains("Visibility: Hidden"));
 
-  click_selector(cx, "gpui-devtools-style-hide");
+  click_selector(cx, "gpui-devtools-remove-style-hide");
   click_selector(cx, "gpui-devtools-copy-style-summary");
   let copied = cx
     .read_from_clipboard()

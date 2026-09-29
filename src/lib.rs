@@ -455,6 +455,7 @@ fn render_style_edits(
         .child(status),
     )
     .child(render_edit_snapshot(state, config))
+    .child(render_active_overrides(&id, state, style_edits, config))
     .child(render_edit_button_row(
       &[
         ("gpui-devtools-style-wider", "Wider", StyleEdit::Wider),
@@ -551,6 +552,68 @@ fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
       optional_debug(state.base_style.opacity.as_ref()),
       config,
     ))
+}
+
+fn render_active_overrides(
+  id: &InspectorElementId,
+  state: &DivInspectorState,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  let Some((_, original_size)) = style_edits.borrow().original_for(id) else {
+    return div();
+  };
+  let active = active_style_edits(&state.base_style, original_size);
+  if active.is_empty() {
+    return div();
+  }
+
+  div()
+    .flex()
+    .flex_col()
+    .gap_1()
+    .child(
+      div()
+        .text_xs()
+        .text_color(rgb(config.muted_text))
+        .child("Active overrides"),
+    )
+    .child(
+      div().flex().flex_wrap().gap_2().children(
+        active
+          .into_iter()
+          .map(|edit| remove_style_edit_button(id.clone(), edit, Rc::clone(style_edits), config)),
+      ),
+    )
+}
+
+fn remove_style_edit_button(
+  id: InspectorElementId,
+  edit: StyleEdit,
+  style_edits: Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> impl IntoElement {
+  inspector_button(
+    style_edit_remove_selector(edit),
+    style_edit_remove_label(edit),
+    false,
+    true,
+    config,
+  )
+  .on_click(move |_, window, cx| {
+    let original = style_edits.borrow().original_for(&id);
+    let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
+      let Some(state) = state else {
+        return;
+      };
+      let Some((original_style, _)) = original else {
+        return;
+      };
+
+      restore_style_edit(&mut state.base_style, edit, &original_style);
+    });
+    window.refresh();
+  })
 }
 
 fn render_edit_button_row(
@@ -766,6 +829,59 @@ fn is_style_edit_active(
     StyleEdit::AccentBackground => style.background == Some(edit_background()),
     StyleEdit::Hide => style.visibility == Some(gpui::Visibility::Hidden),
     StyleEdit::Reset => false,
+  }
+}
+
+fn active_style_edits(
+  style: &StyleRefinement,
+  original_size: gpui::Size<gpui::Pixels>,
+) -> Vec<StyleEdit> {
+  [
+    StyleEdit::Wider,
+    StyleEdit::Narrower,
+    StyleEdit::Taller,
+    StyleEdit::Shorter,
+    StyleEdit::Padding,
+    StyleEdit::Margin,
+    StyleEdit::Border,
+    StyleEdit::HalfOpacity,
+    StyleEdit::AccentBackground,
+    StyleEdit::Hide,
+  ]
+  .into_iter()
+  .filter(|edit| is_style_edit_active(style, *edit, original_size))
+  .collect()
+}
+
+fn style_edit_remove_selector(edit: StyleEdit) -> &'static str {
+  match edit {
+    StyleEdit::Wider => "gpui-devtools-remove-style-wider",
+    StyleEdit::Narrower => "gpui-devtools-remove-style-narrower",
+    StyleEdit::Taller => "gpui-devtools-remove-style-taller",
+    StyleEdit::Shorter => "gpui-devtools-remove-style-shorter",
+    StyleEdit::Padding => "gpui-devtools-remove-style-padding",
+    StyleEdit::Margin => "gpui-devtools-remove-style-margin",
+    StyleEdit::Border => "gpui-devtools-remove-style-border",
+    StyleEdit::HalfOpacity => "gpui-devtools-remove-style-opacity",
+    StyleEdit::AccentBackground => "gpui-devtools-remove-style-bg",
+    StyleEdit::Hide => "gpui-devtools-remove-style-hide",
+    StyleEdit::Reset => "gpui-devtools-remove-style-reset",
+  }
+}
+
+fn style_edit_remove_label(edit: StyleEdit) -> &'static str {
+  match edit {
+    StyleEdit::Wider => "Wider x",
+    StyleEdit::Narrower => "Narrower x",
+    StyleEdit::Taller => "Taller x",
+    StyleEdit::Shorter => "Shorter x",
+    StyleEdit::Padding => "Padding x",
+    StyleEdit::Margin => "Margin x",
+    StyleEdit::Border => "Border x",
+    StyleEdit::HalfOpacity => "Opacity x",
+    StyleEdit::AccentBackground => "Accent bg x",
+    StyleEdit::Hide => "Hide x",
+    StyleEdit::Reset => "Reset x",
   }
 }
 
@@ -1962,9 +2078,11 @@ mod tests {
 
     apply_style_edit(&mut style, StyleEdit::Hide, current_size);
     assert!(is_style_edit_active(&style, StyleEdit::Hide, current_size));
+    assert!(active_style_edits(&style, current_size).contains(&StyleEdit::Hide));
 
     restore_style_edit(&mut style, StyleEdit::Hide, &original);
     assert!(!is_style_edit_active(&style, StyleEdit::Hide, current_size));
+    assert!(!active_style_edits(&style, current_size).contains(&StyleEdit::Hide));
     assert_eq!(style.visibility, original.visibility);
   }
 
