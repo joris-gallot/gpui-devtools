@@ -384,7 +384,12 @@ fn render_div_state(
 enum StyleEdit {
   Wider,
   Narrower,
+  Taller,
+  Shorter,
   Padding,
+  Margin,
+  Border,
+  HalfOpacity,
   AccentBackground,
   Hide,
   Reset,
@@ -439,60 +444,122 @@ fn render_style_edits(
         .text_color(rgb(config.muted_text))
         .child(status),
     )
+    .child(render_edit_snapshot(state, config))
+    .child(render_edit_button_row(
+      &[
+        ("gpui-devtools-style-wider", "Wider", StyleEdit::Wider),
+        (
+          "gpui-devtools-style-narrower",
+          "Narrower",
+          StyleEdit::Narrower,
+        ),
+        ("gpui-devtools-style-taller", "Taller", StyleEdit::Taller),
+        ("gpui-devtools-style-shorter", "Shorter", StyleEdit::Shorter),
+      ],
+      &id,
+      style_edits,
+      config,
+    ))
+    .child(render_edit_button_row(
+      &[
+        (
+          "gpui-devtools-style-padding",
+          "Padding 12",
+          StyleEdit::Padding,
+        ),
+        ("gpui-devtools-style-margin", "Margin 8", StyleEdit::Margin),
+        ("gpui-devtools-style-border", "Border 2", StyleEdit::Border),
+        (
+          "gpui-devtools-style-opacity",
+          "Opacity 50%",
+          StyleEdit::HalfOpacity,
+        ),
+      ],
+      &id,
+      style_edits,
+      config,
+    ))
+    .child(render_edit_button_row(
+      &[
+        (
+          "gpui-devtools-style-bg",
+          "Accent bg",
+          StyleEdit::AccentBackground,
+        ),
+        ("gpui-devtools-style-hide", "Hide", StyleEdit::Hide),
+        ("gpui-devtools-style-reset", "Reset", StyleEdit::Reset),
+      ],
+      &id,
+      style_edits,
+      config,
+    ))
     .child(
       div()
         .flex()
         .flex_wrap()
         .gap_2()
-        .child(style_edit_button(
-          "gpui-devtools-style-wider",
-          "Wider",
-          StyleEdit::Wider,
-          id.clone(),
-          Rc::clone(style_edits),
+        .child(style_copy_button(
+          "gpui-devtools-copy-style-summary",
+          "Copy summary",
+          style_summary(&state.base_style),
           config,
         ))
-        .child(style_edit_button(
-          "gpui-devtools-style-narrower",
-          "Narrower",
-          StyleEdit::Narrower,
-          id.clone(),
-          Rc::clone(style_edits),
-          config,
-        ))
-        .child(style_edit_button(
-          "gpui-devtools-style-padding",
-          "Padding 12",
-          StyleEdit::Padding,
-          id.clone(),
-          Rc::clone(style_edits),
-          config,
-        ))
-        .child(style_edit_button(
-          "gpui-devtools-style-bg",
-          "Accent bg",
-          StyleEdit::AccentBackground,
-          id.clone(),
-          Rc::clone(style_edits),
-          config,
-        ))
-        .child(style_edit_button(
-          "gpui-devtools-style-hide",
-          "Hide",
-          StyleEdit::Hide,
-          id.clone(),
-          Rc::clone(style_edits),
-          config,
-        ))
-        .child(style_edit_button(
-          "gpui-devtools-style-reset",
-          "Reset",
-          StyleEdit::Reset,
-          id,
-          Rc::clone(style_edits),
+        .child(style_copy_button(
+          "gpui-devtools-copy-style-rust",
+          "Copy Rust",
+          style_rust_snippet(&state.base_style),
           config,
         )),
     )
+}
+
+fn render_edit_snapshot(state: &DivInspectorState, config: &Config) -> Div {
+  div()
+    .grid()
+    .gap_1()
+    .text_xs()
+    .child(geometry_label(
+      "Size",
+      compact_size(state.bounds.size),
+      config,
+    ))
+    .child(geometry_label(
+      "Explicit width",
+      optional_debug(state.base_style.size.width.as_ref()),
+      config,
+    ))
+    .child(geometry_label(
+      "Explicit height",
+      optional_debug(state.base_style.size.height.as_ref()),
+      config,
+    ))
+    .child(geometry_label(
+      "Opacity",
+      optional_debug(state.base_style.opacity.as_ref()),
+      config,
+    ))
+}
+
+fn render_edit_button_row(
+  actions: &[(&'static str, &'static str, StyleEdit)],
+  id: &InspectorElementId,
+  style_edits: &Rc<RefCell<StyleEditState>>,
+  config: &Config,
+) -> Div {
+  div()
+    .flex()
+    .flex_wrap()
+    .gap_2()
+    .children(actions.iter().map(|(selector, label, edit)| {
+      style_edit_button(
+        selector,
+        label,
+        *edit,
+        id.clone(),
+        Rc::clone(style_edits),
+        config,
+      )
+    }))
 }
 
 fn style_edit_button(
@@ -503,25 +570,8 @@ fn style_edit_button(
   style_edits: Rc<RefCell<StyleEditState>>,
   config: &Config,
 ) -> impl IntoElement {
-  div()
-    .id(selector)
-    .debug_selector(|| selector.into())
-    .px_2()
-    .py_1()
-    .rounded_sm()
-    .cursor_pointer()
-    .border_1()
-    .border_color(rgb(config.border))
-    .bg(rgb(config.background))
-    .text_xs()
-    .text_color(if edit == StyleEdit::Reset {
-      rgb(config.muted_text)
-    } else {
-      rgb(config.text)
-    })
-    .hover(|button| button.border_color(rgb(config.accent)))
-    .child(label)
-    .on_click(move |_, window, cx| {
+  inspector_button(selector, label, edit == StyleEdit::Reset, config).on_click(
+    move |_, window, cx| {
       let original_style = style_edits.borrow().original_for(&id);
       let _ = window.with_inspector_state::<DivInspectorState, _>(Some(&id), cx, |state, _| {
         let Some(state) = state else {
@@ -538,7 +588,45 @@ fn style_edit_button(
         }
       });
       window.refresh();
+    },
+  )
+}
+
+fn style_copy_button(
+  selector: &'static str,
+  label: &'static str,
+  value: String,
+  config: &Config,
+) -> impl IntoElement {
+  inspector_button(selector, label, false, config).on_click(move |_, _window, cx| {
+    cx.write_to_clipboard(text_clipboard_item(value.clone()));
+  })
+}
+
+fn inspector_button(
+  selector: &'static str,
+  label: &'static str,
+  muted: bool,
+  config: &Config,
+) -> gpui::Stateful<Div> {
+  div()
+    .id(selector)
+    .debug_selector(|| selector.into())
+    .px_2()
+    .py_1()
+    .rounded_sm()
+    .cursor_pointer()
+    .border_1()
+    .border_color(rgb(config.border))
+    .bg(rgb(config.background))
+    .text_xs()
+    .text_color(if muted {
+      rgb(config.muted_text)
+    } else {
+      rgb(config.text)
     })
+    .hover(|button| button.border_color(rgb(config.accent)))
+    .child(label)
 }
 
 fn apply_style_edit(
@@ -554,12 +642,37 @@ fn apply_style_edit(
       let width = (f32::from(current_size.width) - 40.0).max(1.0);
       style.size.width = Some(gpui::px(width).into());
     }
+    StyleEdit::Taller => {
+      style.size.height = Some(gpui::px(f32::from(current_size.height) + 40.0).into());
+    }
+    StyleEdit::Shorter => {
+      let height = (f32::from(current_size.height) - 40.0).max(1.0);
+      style.size.height = Some(gpui::px(height).into());
+    }
     StyleEdit::Padding => {
       let padding = gpui::px(12.0).into();
       style.padding.top = Some(padding);
       style.padding.right = Some(padding);
       style.padding.bottom = Some(padding);
       style.padding.left = Some(padding);
+    }
+    StyleEdit::Margin => {
+      let margin = gpui::px(8.0).into();
+      style.margin.top = Some(margin);
+      style.margin.right = Some(margin);
+      style.margin.bottom = Some(margin);
+      style.margin.left = Some(margin);
+    }
+    StyleEdit::Border => {
+      let border = gpui::px(2.0).into();
+      style.border_widths.top = Some(border);
+      style.border_widths.right = Some(border);
+      style.border_widths.bottom = Some(border);
+      style.border_widths.left = Some(border);
+      style.border_color = Some(rgb(0x61afef).into());
+    }
+    StyleEdit::HalfOpacity => {
+      style.opacity = Some(0.5);
     }
     StyleEdit::AccentBackground => {
       style.background = Some(rgb(0x1f4f73).into());
@@ -569,6 +682,110 @@ fn apply_style_edit(
     }
     StyleEdit::Reset => {}
   }
+}
+
+fn optional_debug<T: std::fmt::Debug>(value: Option<&T>) -> String {
+  value
+    .map(|value| format!("{value:?}"))
+    .unwrap_or_else(|| "auto".into())
+}
+
+fn style_summary(style: &StyleRefinement) -> String {
+  let mut lines = Vec::new();
+  for group in style_groups(style) {
+    lines.push(format!("{}:", group.label));
+    lines.extend(
+      group
+        .properties
+        .into_iter()
+        .map(|property| format!("  {}: {}", property.label, property.value)),
+    );
+  }
+
+  if lines.is_empty() {
+    "No explicit style refinements.".into()
+  } else {
+    lines.join("\n")
+  }
+}
+
+fn style_rust_snippet(style: &StyleRefinement) -> String {
+  let mut lines = vec!["div()".to_owned()];
+  push_length_method(&mut lines, "w", style.size.width.as_ref());
+  push_length_method(&mut lines, "h", style.size.height.as_ref());
+  push_sides_method(&mut lines, "p", &style.padding);
+  push_sides_method(&mut lines, "m", &style.margin);
+  push_sides_method(&mut lines, "border", &style.border_widths);
+
+  if let Some(background) = style.background.as_ref() {
+    lines.push(format!("  .bg({})", rust_fill(background)));
+  }
+  if let Some(opacity) = style.opacity {
+    lines.push(format!("  .opacity({opacity:?})"));
+  }
+  if style.visibility == Some(gpui::Visibility::Hidden) {
+    lines.push("  .invisible()".into());
+  }
+
+  lines.join("\n")
+}
+
+fn push_length_method<T: std::fmt::Debug>(
+  lines: &mut Vec<String>,
+  method: &'static str,
+  value: Option<&T>,
+) {
+  if let Some(value) = value {
+    lines.push(format!("  .{method}({})", rust_debug_value(value)));
+  }
+}
+
+fn push_sides_method<T: Clone + std::fmt::Debug + Default + PartialEq>(
+  lines: &mut Vec<String>,
+  method: &'static str,
+  sides: &gpui::EdgesRefinement<T>,
+) {
+  let (Some(top), Some(right), Some(bottom), Some(left)) = (
+    sides.top.as_ref(),
+    sides.right.as_ref(),
+    sides.bottom.as_ref(),
+    sides.left.as_ref(),
+  ) else {
+    return;
+  };
+
+  if top == right && top == bottom && top == left {
+    lines.push(format!("  .{method}({})", rust_debug_value(top)));
+  }
+}
+
+fn rust_fill(fill: &gpui::Fill) -> String {
+  fill
+    .color()
+    .and_then(|background| background.as_solid())
+    .map(rust_color)
+    .unwrap_or_else(|| format!("{fill:?}"))
+}
+
+fn rust_color(color: gpui::Hsla) -> String {
+  let value = format_color(color)
+    .strip_prefix('#')
+    .unwrap_or("000000")
+    .to_owned();
+  format!("rgb(0x{value})")
+}
+
+fn rust_debug_value<T: std::fmt::Debug>(value: &T) -> String {
+  let value = format!("{value:?}");
+  let Some(px_value) = value.strip_suffix("px") else {
+    return value;
+  };
+
+  let Ok(parsed) = px_value.parse::<f32>() else {
+    return value;
+  };
+
+  format!("px({parsed:.1})")
 }
 
 fn render_styles(style: &StyleRefinement, config: &Config) -> Div {
@@ -1585,12 +1802,40 @@ mod tests {
     apply_style_edit(&mut style, StyleEdit::Wider, current_size);
     assert_eq!(style.size.width, Some(gpui::px(140.0).into()));
 
+    apply_style_edit(&mut style, StyleEdit::Taller, current_size);
+    assert_eq!(style.size.height, Some(gpui::px(80.0).into()));
+
     apply_style_edit(&mut style, StyleEdit::Padding, current_size);
     assert_eq!(style.padding.top, Some(gpui::px(12.0).into()));
     assert_eq!(style.padding.right, Some(gpui::px(12.0).into()));
 
+    apply_style_edit(&mut style, StyleEdit::Margin, current_size);
+    assert_eq!(style.margin.left, Some(gpui::px(8.0).into()));
+
+    apply_style_edit(&mut style, StyleEdit::Border, current_size);
+    assert_eq!(style.border_widths.top, Some(gpui::px(2.0).into()));
+    assert_eq!(style.border_color, Some(rgb(0x61afef).into()));
+
+    apply_style_edit(&mut style, StyleEdit::HalfOpacity, current_size);
+    assert_eq!(style.opacity, Some(0.5));
+
     apply_style_edit(&mut style, StyleEdit::Hide, current_size);
     assert_eq!(style.visibility, Some(gpui::Visibility::Hidden));
+  }
+
+  #[test]
+  fn style_exports_include_summary_and_rust_snippet() {
+    let mut style = StyleRefinement::default();
+    let current_size = gpui::size(gpui::px(100.0), gpui::px(40.0));
+    apply_style_edit(&mut style, StyleEdit::Wider, current_size);
+    apply_style_edit(&mut style, StyleEdit::Padding, current_size);
+    apply_style_edit(&mut style, StyleEdit::AccentBackground, current_size);
+
+    assert!(style_summary(&style).contains("Padding: 12px"));
+    let rust = style_rust_snippet(&style);
+    assert!(rust.contains(".w(px(140.0))"));
+    assert!(rust.contains(".p(px(12.0))"));
+    assert!(rust.contains(".bg(rgb(0x1f4f73))"));
   }
 
   #[test]

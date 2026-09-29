@@ -144,6 +144,32 @@ fn temporary_style_edits_update_and_reset_the_selected_element(cx: &mut TestAppC
 }
 
 #[gpui::test]
+fn style_export_buttons_copy_the_selected_element_styles(cx: &mut TestAppContext) {
+  cx.update(gpui_devtools::init);
+  let cx = open_fixture(cx);
+  open_inspector(cx);
+
+  click_selector(cx, "target");
+  click_selector(cx, "gpui-devtools-style-padding");
+  click_selector(cx, "gpui-devtools-copy-style-summary");
+
+  let copied = cx
+    .read_from_clipboard()
+    .and_then(|item| item.text())
+    .expect("style summary should be copied");
+  assert!(copied.contains("Spacing:"));
+  assert!(copied.contains("Padding: 12px"));
+
+  click_selector(cx, "gpui-devtools-copy-style-rust");
+  let copied = cx
+    .read_from_clipboard()
+    .and_then(|item| item.text())
+    .expect("style Rust snippet should be copied");
+  assert!(copied.contains("div()"));
+  assert!(copied.contains(".p(px(12.0))"));
+}
+
+#[gpui::test]
 fn copy_source_writes_the_selected_element_location(cx: &mut TestAppContext) {
   cx.update(gpui_devtools::init);
   let cx = open_fixture(cx);

@@ -13,7 +13,7 @@ The inspector includes:
 - an element picker
 - source locations and GPUI element IDs with copy actions
 - a box model view with element bounds, content size, margin, border, and padding
-- temporary quick style edits for the selected `Div`, including width, padding, background, visibility, and reset
+- temporary quick style edits for the selected `Div`, including size, spacing, border, opacity, background, visibility, reset, and copy/export actions
 - grouped `Div` style refinements with compact spacing and color previews
 - a global toggle action and optional default keybinding
 
