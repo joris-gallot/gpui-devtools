@@ -62,11 +62,12 @@ gpui_devtools::init_with(
 
 ## Roadmap
 
-- render, layout and paint profiler
-- repaint highlighting
-- focus and keybinding inspector
-- action and event timeline
-- entity lifecycle diagnostics
+- deeper style inspection and live editing
+- better element navigation, selection, and source discovery
+- visual debugging helpers such as repaint and layout overlays
+- focus, keybinding, action, and event inspection
+- render, layout, and paint diagnostics
+- entity and lifecycle debugging tools
 
 ## License
 
