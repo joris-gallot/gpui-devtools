@@ -12,7 +12,7 @@ use crate::{
     active_style_overrides, optional_debug, style_edit_diff_label, style_rust_snippet,
     style_summary_with_overrides,
   },
-  ui::{geometry_label, section},
+  ui::{geometry_label, inspector_button, section},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -565,41 +565,6 @@ fn style_copy_button(
       cx.write_to_clipboard(text_clipboard_item(value.clone()));
     },
   )
-}
-
-fn inspector_button(
-  selector: &'static str,
-  label: String,
-  muted: bool,
-  active: bool,
-  config: &Config,
-) -> gpui::Stateful<Div> {
-  div()
-    .id(selector)
-    .debug_selector(|| selector.into())
-    .px_2()
-    .py_1()
-    .rounded_sm()
-    .cursor_pointer()
-    .border_1()
-    .border_color(if active {
-      rgb(config.accent)
-    } else {
-      rgb(config.border)
-    })
-    .bg(if active {
-      rgb(config.accent)
-    } else {
-      rgb(config.background)
-    })
-    .text_xs()
-    .text_color(if muted {
-      rgb(config.muted_text)
-    } else {
-      rgb(config.text)
-    })
-    .hover(|button| button.border_color(rgb(config.accent)))
-    .child(label)
 }
 
 pub(crate) fn apply_style_edit(

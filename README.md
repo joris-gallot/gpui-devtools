@@ -16,6 +16,7 @@ The inspector includes:
 - a computed values panel with measured bounds, content size, explicit dimensions, spacing, opacity, visibility, and background
 - temporary quick style edits for the selected `Div`, including presets, incremental size/spacing/opacity controls, background, visibility, reset, and copy/export actions
 - grouped `Div` style refinements with compact spacing and color previews
+- a Keyboard tab with the focus state, the key context stack, available actions with their active bindings, pending multi-stroke input, the 20 most recent keystrokes and the action each one triggered, and a copyable text report
 - a global toggle action and optional default keybinding
 
 ## Install
@@ -62,12 +63,18 @@ gpui_devtools::init_with(
 );
 ```
 
+## Keyboard inspection
+
+The Keyboard tab shows what GPUI sees from the focused element: the key contexts from the window root to the focus, the actions available there, and the binding that would trigger each one. Keystrokes are recorded per window, together with the action they triggered and the context stack at the time. A keystroke shows "no action" when no binding matched or when no handler on the focus path handled the action.
+
+Clicks on the panel are ignored while picking, so select an element before you switch tabs. GPUI does not expose which element owns the focus, so the panel only tells you whether something is focused.
+
 ## Roadmap
 
 - deeper style inspection and live editing
 - better element navigation, selection, and source discovery
 - visual debugging helpers such as repaint and layout overlays
-- focus, keybinding, action, and event inspection
+- event inspection beyond keystrokes
 - render, layout, and paint diagnostics
 - entity and lifecycle debugging tools
 

@@ -1,8 +1,11 @@
 use std::time::Duration;
 
 use gpui::{
-  AnyElement, Context, Modifiers, TestAppContext, VisualTestContext, Window, div, prelude::*, px,
+  AnyElement, Context, FocusHandle, KeyBinding, Modifiers, TestAppContext, VisualTestContext,
+  Window, div, prelude::*, px,
 };
+
+gpui::actions!(fixture, [Run, JumpToTop]);
 
 struct Fixture {
   target: fn() -> (AnyElement, u32),
@@ -236,5 +239,126 @@ fn copy_global_id_writes_the_full_id(cx: &mut TestAppContext) {
   assert!(
     copied.contains("target"),
     "expected `{copied}` to contain the element ID"
+  );
+}
+
+struct KeyboardFixture {
+  focus: FocusHandle,
+}
+
+impl Render for KeyboardFixture {
+  fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    div()
+      .size_full()
+      .key_context("Fixture")
+      .track_focus(&self.focus)
+      .on_action(|_: &Run, _, _| {})
+      .on_action(|_: &JumpToTop, _, _| {})
+      .child(
+        div()
+          .id("target")
+          .debug_selector(|| "target".into())
+          .size(px(100.0)),
+      )
+  }
+}
+
+fn open_keyboard_tab(cx: &mut TestAppContext) -> &mut VisualTestContext {
+  cx.update(|cx| {
+    gpui_devtools::init(cx);
+    cx.bind_keys([
+      KeyBinding::new("ctrl-k", Run, Some("Fixture")),
+      KeyBinding::new("g g", JumpToTop, Some("Fixture")),
+    ]);
+  });
+  let (view, cx) = cx.add_window_view(|_, cx| KeyboardFixture {
+    focus: cx.focus_handle(),
+  });
+  cx.update(|window, cx| {
+    window.activate_window();
+    let focus = view.read(cx).focus.clone();
+    window.focus(&focus, cx);
+  });
+  cx.run_until_parked();
+
+  open_inspector(cx);
+  click_selector(cx, "target");
+  click_selector(cx, "gpui-devtools-tab-keyboard");
+  cx
+}
+
+fn keyboard_report(cx: &mut VisualTestContext) -> String {
+  click_selector(cx, "gpui-devtools-copy-keyboard-report");
+  cx.read_from_clipboard()
+    .and_then(|item| item.text())
+    .expect("keyboard report should be copied")
+}
+
+#[gpui::test]
+fn keyboard_tab_reports_focus_contexts_and_bindings(cx: &mut TestAppContext) {
+  let cx = open_keyboard_tab(cx);
+
+  let report = keyboard_report(cx);
+  assert!(report.contains("Focus: focused element"), "{report}");
+  assert!(
+    report.contains("Key contexts (root to focus):\n  Fixture"),
+    "{report}"
+  );
+  assert!(report.contains("  fixture::Run (ctrl-k)"), "{report}");
+  assert!(report.contains("Pending input: none"), "{report}");
+}
+
+#[gpui::test]
+fn keyboard_tab_records_keystrokes_and_their_actions(cx: &mut TestAppContext) {
+  let cx = open_keyboard_tab(cx);
+
+  cx.simulate_keystrokes("ctrl-k x");
+  cx.run_until_parked();
+  let report = keyboard_report(cx);
+  assert!(
+    report.contains("  x -> no action [Fixture]\n  ctrl-k -> fixture::Run [Fixture]"),
+    "{report}"
+  );
+
+  click_selector(cx, "gpui-devtools-clear-keystrokes");
+  let report = keyboard_report(cx);
+  assert!(
+    report.contains("Recent keystrokes (newest first):\n  none"),
+    "{report}"
+  );
+}
+
+#[gpui::test]
+fn keyboard_tab_shows_pending_multi_stroke_input(cx: &mut TestAppContext) {
+  let cx = open_keyboard_tab(cx);
+
+  cx.simulate_keystrokes("g");
+  cx.run_until_parked();
+  let report = keyboard_report(cx);
+  assert!(report.contains("Pending input: g"), "{report}");
+  assert!(report.contains("  g g -> fixture::JumpToTop"), "{report}");
+
+  cx.simulate_keystrokes("g");
+  cx.run_until_parked();
+  let report = keyboard_report(cx);
+  assert!(report.contains("Pending input: none"), "{report}");
+  assert!(
+    report.contains("  g -> fixture::JumpToTop [Fixture]"),
+    "{report}"
+  );
+}
+
+#[gpui::test]
+fn picking_switches_back_to_the_element_tab(cx: &mut TestAppContext) {
+  let cx = open_keyboard_tab(cx);
+  assert!(
+    cx.debug_bounds("gpui-devtools-copy-keyboard-report")
+      .is_some()
+  );
+
+  click_selector(cx, "gpui-devtools-pick");
+  assert!(
+    cx.debug_bounds("gpui-devtools-copy-keyboard-report")
+      .is_none()
   );
 }

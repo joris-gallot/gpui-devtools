@@ -21,6 +21,7 @@ The goal is to provide Chrome DevTools-like inspection and diagnostics for GPUI 
 - `src/box_model.rs`: box model data extraction and rendering.
 - `src/computed.rs`: computed/measured style panel.
 - `src/copy.rs`: clipboard helpers and copy feedback state.
+- `src/keyboard.rs`: Keyboard tab: focus, key contexts, actions, bindings, and keystroke log.
 - `src/style_export.rs`: style summaries, override diffs, and Rust snippet exports.
 - `src/styles.rs`: explicit style grouping, formatting, and style panel rendering.
 - `src/temporary_edits.rs`: temporary style edit controls, state, and mutation logic.

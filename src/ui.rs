@@ -45,7 +45,7 @@ pub(crate) fn geometry_label(label: &'static str, value: String, config: &Config
     )
 }
 
-pub(crate) fn section(title: &'static str, config: &Config) -> Div {
+pub(crate) fn section(title: impl Into<gpui::SharedString>, config: &Config) -> Div {
   div()
     .p_3()
     .flex()
@@ -55,7 +55,11 @@ pub(crate) fn section(title: &'static str, config: &Config) -> Div {
     .bg(rgb(config.panel_background))
     .border_1()
     .border_color(rgb(config.border))
-    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(title))
+    .child(
+      div()
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .child(title.into()),
+    )
 }
 
 pub(crate) fn property(label: &'static str, value: String, config: &Config) -> Div {
@@ -91,4 +95,39 @@ pub(crate) fn property_with_action(
         .font_family("monospace")
         .child(value),
     )
+}
+
+pub(crate) fn inspector_button(
+  selector: &'static str,
+  label: String,
+  muted: bool,
+  active: bool,
+  config: &Config,
+) -> gpui::Stateful<Div> {
+  div()
+    .id(selector)
+    .debug_selector(|| selector.into())
+    .px_2()
+    .py_1()
+    .rounded_sm()
+    .cursor_pointer()
+    .border_1()
+    .border_color(if active {
+      rgb(config.accent)
+    } else {
+      rgb(config.border)
+    })
+    .bg(if active {
+      rgb(config.accent)
+    } else {
+      rgb(config.background)
+    })
+    .text_xs()
+    .text_color(if muted {
+      rgb(config.muted_text)
+    } else {
+      rgb(config.text)
+    })
+    .hover(|button| button.border_color(rgb(config.accent)))
+    .child(label)
 }

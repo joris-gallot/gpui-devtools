@@ -2,6 +2,7 @@
 //!
 //! The inspector renders next to the application window and shows the picked element's source
 //! location, GPUI element ID, bounds, content size, temporary edits and `Div` style refinements.
+//! A Keyboard tab shows the focus, key contexts, available actions and recent keystrokes.
 //!
 //! Install it once the rest of the application is initialized, after any library that registers
 //! its own inspector renderer:
@@ -130,9 +131,16 @@ pub fn init_with(config: Config, cx: &mut App) {
     }
   });
 
-  let copy_feedback = Rc::new(RefCell::new(CopyFeedback::default()));
+  let keyboard_log = Rc::new(RefCell::new(KeyboardLog::default()));
+  observe_keyboard(&keyboard_log, cx);
+
+  let panel = PanelState {
+    copy_feedback: Rc::new(RefCell::new(CopyFeedback::default())),
+    tab: Rc::new(RefCell::new(Tab::default())),
+    keyboard_log,
+  };
   cx.set_inspector_renderer(Box::new(move |inspector, window, cx| {
-    render_inspector(inspector, window, cx, &copy_feedback, &config).into_any_element()
+    render_inspector(inspector, window, cx, &panel, &config).into_any_element()
   }));
 }
 
@@ -150,19 +158,34 @@ pub fn toggle_active_window(cx: &mut App) {
   });
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Tab {
+  #[default]
+  Element,
+  Keyboard,
+}
+
+struct PanelState {
+  copy_feedback: Rc<RefCell<CopyFeedback>>,
+  tab: Rc<RefCell<Tab>>,
+  keyboard_log: Rc<RefCell<KeyboardLog>>,
+}
+
 fn render_inspector(
   inspector: &mut Inspector,
   window: &mut Window,
   cx: &mut Context<Inspector>,
-  copy_feedback: &Rc<RefCell<CopyFeedback>>,
+  panel: &PanelState,
   config: &Config,
 ) -> Div {
   let active_element = inspector.active_element_id().cloned();
   let is_picking = inspector.is_picking();
   if is_picking {
     window.request_animation_frame();
+    // The panel ignores clicks while picking, so show the element being hovered.
+    *panel.tab.borrow_mut() = Tab::Element;
   }
-  let inspector_states = inspector.render_inspector_states(window, cx);
+  let tab = *panel.tab.borrow();
   let content = div()
     .id("gpui-devtools-content")
     .flex_1()
@@ -171,12 +194,15 @@ fn render_inspector(
     .flex()
     .flex_col()
     .gap_3();
-  let content = if let Some(id) = active_element {
-    content
-      .child(render_element_id(&id, cx, copy_feedback, config))
-      .children(inspector_states)
-  } else {
-    content.child(render_empty_state(is_picking, config))
+  let content = match (tab, active_element) {
+    (Tab::Keyboard, _) => content.child(render_keyboard(window, cx, &panel.keyboard_log, config)),
+    (Tab::Element, Some(id)) => {
+      let inspector_states = inspector.render_inspector_states(window, cx);
+      content
+        .child(render_element_id(&id, cx, &panel.copy_feedback, config))
+        .children(inspector_states)
+    }
+    (Tab::Element, None) => content.child(render_empty_state(is_picking, config)),
   };
 
   let pick_button = div()
@@ -252,7 +278,56 @@ fn render_inspector(
         )
         .child(close_button),
     )
+    .child(render_tabs(tab, &panel.tab, config))
     .child(content)
+}
+
+fn render_tabs(active: Tab, tab_state: &Rc<RefCell<Tab>>, config: &Config) -> Div {
+  let tab_button = |tab: Tab, selector: &'static str, label: &'static str| {
+    let tab_state = Rc::clone(tab_state);
+    let is_active = tab == active;
+    div()
+      .id(selector)
+      .debug_selector(|| selector.into())
+      .px_3()
+      .py_1()
+      .rounded_md()
+      .cursor_pointer()
+      .text_sm()
+      .when(is_active, |button| {
+        button
+          .bg(rgb(config.panel_background))
+          .text_color(rgb(config.text))
+      })
+      .when(!is_active, |button| {
+        button
+          .text_color(rgb(config.muted_text))
+          .hover(|button| button.text_color(rgb(config.text)))
+      })
+      .child(label)
+      .on_click(move |_, window, _| {
+        *tab_state.borrow_mut() = tab;
+        window.refresh();
+      })
+  };
+
+  div()
+    .px_3()
+    .py_2()
+    .flex()
+    .gap_1()
+    .border_b_1()
+    .border_color(rgb(config.border))
+    .child(tab_button(
+      Tab::Element,
+      "gpui-devtools-tab-element",
+      "Element",
+    ))
+    .child(tab_button(
+      Tab::Keyboard,
+      "gpui-devtools-tab-keyboard",
+      "Keyboard",
+    ))
 }
 
 fn render_empty_state(is_picking: bool, config: &Config) -> Div {
@@ -369,6 +444,7 @@ fn render_div_state(
 mod box_model;
 mod computed;
 mod copy;
+mod keyboard;
 mod style_export;
 mod styles;
 mod temporary_edits;
@@ -376,6 +452,7 @@ mod ui;
 use box_model::render_box_model;
 use computed::render_computed;
 use copy::{CopyFeedback, CopyTarget, CopyableProperty, copyable_property};
+use keyboard::{KeyboardLog, observe_keyboard, render_keyboard};
 use styles::render_styles;
 use temporary_edits::{StyleEditState, render_style_edits};
 use ui::{property, render_icon, section};
