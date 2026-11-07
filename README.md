@@ -31,6 +31,8 @@ gpui-devtools = { version = "0.5", optional = true }
 
 GPUI DevTools 0.5 targets [`gpui-pre`](https://crates.io/crates/gpui-pre) 0.3, the crates.io snapshot of Zed's GPUI also used by [gpui-kit](https://github.com/longbridge/gpui-kit). Your application must resolve to the same GPUI crate, otherwise Cargo builds two incompatible copies.
 
+Since 0.5.2, GPUI DevTools requires `gpui-pre` 0.3.11 or later and Rust 1.98 or later.
+
 | gpui-devtools | GPUI |
 | --- | --- |
 | 0.5 | `gpui-pre` 0.3 |
